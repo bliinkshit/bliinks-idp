@@ -1,0 +1,88 @@
+// src/main.rs
+mod cfg;
+mod db;
+mod error;
+mod middleware;
+mod render;
+mod routes;
+mod session;
+
+use axum::{
+    middleware as axum_middleware,
+    extract::Request,
+    routing::{get, post},
+    Router,
+};
+use sqlx::SqlitePool;
+use std::sync::Arc;
+use tera::Tera;
+use tracing::{info, warn};
+use tracing_subscriber;
+
+use cfg::CONFIG;
+use db::init_pool;
+use error::AppError;
+use session::delete_expired;
+
+pub struct AppState {
+    pub tera: Tera,
+    pub pool: SqlitePool,
+}
+
+async fn inject_pool(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    mut req: Request,
+    next: axum_middleware::Next,
+) -> axum::response::Response {
+    req.extensions_mut().insert(state.pool.clone());
+    next.run(req).await
+}
+
+#[tokio::main]
+async fn main() -> Result<(), AppError> {
+    tracing_subscriber::fmt().init();
+
+    if CONFIG.general.dev {
+        warn!("DEV_MODE is enabled");
+    }
+
+    let pool  = init_pool(&CONFIG.database.url).await?;
+    let tera  = Tera::new("templates/**/*")?;
+    let state = Arc::new(AppState { tera, pool });
+
+    let cleanup_pool = state.pool.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            delete_expired(&cleanup_pool).await;
+        }
+    });
+
+    let guest_routes = Router::new()
+        .route("/auth/register", get(routes::auth::render_register))
+        .route("/auth/register", post(routes::auth::handle_register))
+        .route("/auth/login",    get(routes::auth::render_login))
+        .route("/auth/login",    post(routes::auth::handle_login))
+        .route("/captcha",       get(routes::captcha::render_captcha))
+        .layer(axum_middleware::from_fn(middleware::redirect_if_authed));
+
+    let protected_routes = Router::new()
+        .route("/",              get(routes::index::render_index))
+        .route("/auth/logout",   get(routes::auth::handle_logout))
+        .layer(axum_middleware::from_fn(middleware::require_auth));
+
+    let app = Router::new()
+        .route("/auth",          get(routes::auth::render_redirect))
+        .merge(guest_routes)
+        .merge(protected_routes)
+        .fallback(routes::serve::static_or_error)
+        .layer(axum_middleware::from_fn_with_state(state.clone(), inject_pool))
+        .with_state(state);
+
+    let listener = tokio::net::TcpListener::bind(CONFIG.server.addr()).await?;
+    info!("listening on http://{}", CONFIG.server.addr());
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
