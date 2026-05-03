@@ -24,6 +24,7 @@ use cfg::CONFIG;
 use db::init_pool;
 use error::AppError;
 use session::delete_expired;
+use db::queries::delete_expired_password_resets;
 
 pub struct AppState {
     pub tera: Tera,
@@ -57,24 +58,27 @@ async fn main() -> Result<(), AppError> {
         loop {
             interval.tick().await;
             delete_expired(&cleanup_pool).await;
+            delete_expired_password_resets(&cleanup_pool).await;
         }
     });
 
     let guest_routes = Router::new()
-        .route("/auth/register", get(routes::auth::render_register))
-        .route("/auth/register", post(routes::auth::handle_register))
-        .route("/auth/login",    get(routes::auth::render_login))
-        .route("/auth/login",    post(routes::auth::handle_login))
-        .route("/captcha",       get(routes::captcha::render_captcha))
+        .route("/auth/register",  get(routes::auth::render_register))
+        .route("/auth/register",  post(routes::auth::handle_register))
+        .route("/auth/login",     get(routes::auth::render_login))
+        .route("/auth/login",     post(routes::auth::handle_login))
+        .route("/auth/reset",     get(routes::auth::render_reset))
+        .route("/auth/reset",     post(routes::auth::handle_reset))
+        .route("/captcha",        get(routes::captcha::render_captcha))
         .layer(axum_middleware::from_fn(middleware::redirect_if_authed));
 
     let protected_routes = Router::new()
-        .route("/",              get(routes::index::render_index))
-        .route("/auth/logout",   get(routes::auth::handle_logout))
+        .route("/",               get(routes::index::render_index))
+        .route("/auth/logout",    get(routes::auth::handle_logout))
         .layer(axum_middleware::from_fn(middleware::require_auth));
 
     let app = Router::new()
-        .route("/auth",          get(routes::auth::render_redirect))
+        .route("/auth",           get(routes::auth::render_redirect))
         .merge(guest_routes)
         .merge(protected_routes)
         .fallback(routes::serve::static_or_error)

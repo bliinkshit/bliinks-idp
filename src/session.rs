@@ -12,14 +12,15 @@ use uuid::Uuid;
 
 pub const COOKIE_NAME: &str = "sid";
 const REMEMBER_COOKIE_NAME: &str = "remember";
-const SESSION_TTL_HOURS: i64    = 2;
-const REMEMBER_TTL_DAYS: i64    = 30;
+const SESSION_TTL_HOURS: i64 = 2;
+const REMEMBER_TTL_DAYS: i64 = 30;
 
 #[derive(Debug, Clone)]
 pub struct Session {
     pub id:       String,
     pub data:     HashMap<String, Value>,
     pub remember: bool,
+    pub user_id:  Option<String>,
     pool:         SqlitePool,
     is_new:       bool,
 }
@@ -33,8 +34,8 @@ impl Session {
         if let Some(id) = sid {
             let ttl_hours = if remember { REMEMBER_TTL_DAYS * 24 } else { SESSION_TTL_HOURS };
 
-            if let Ok(Some(row)) = sqlx::query_as::<_, (String, String)>(
-                "SELECT id, data FROM sessions WHERE id = ? AND expires_at > ?",
+            if let Ok(Some(row)) = sqlx::query_as::<_, (String, String, Option<String>)>(
+                "SELECT id, data, user_id FROM sessions WHERE id = ? AND expires_at > ?",
             )
             .bind(id)
             .bind(Utc::now().to_rfc3339())
@@ -45,11 +46,12 @@ impl Session {
                     .unwrap_or_default();
 
                 let session = Self {
-                    id: row.0,
+                    id:      row.0,
                     data,
                     remember,
-                    pool: pool.clone(),
-                    is_new: false,
+                    user_id: row.2,
+                    pool:    pool.clone(),
+                    is_new:  false,
                 };
 
                 if remember {
@@ -61,11 +63,12 @@ impl Session {
         }
 
         Self {
-            id:       Uuid::new_v4().to_string(),
-            data:     HashMap::new(),
+            id:      Uuid::new_v4().to_string(),
+            data:    HashMap::new(),
             remember: false,
-            pool:     pool.clone(),
-            is_new:   true,
+            user_id: None,
+            pool:    pool.clone(),
+            is_new:  true,
         }
     }
 
@@ -91,12 +94,16 @@ impl Session {
         let expires = (Utc::now() + chrono::Duration::hours(hours)).to_rfc3339();
 
         let _ = sqlx::query(
-            "INSERT INTO sessions (id, data, expires_at)
-             VALUES (?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET data = excluded.data, expires_at = excluded.expires_at",
+            "INSERT INTO sessions (id, data, user_id, expires_at)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+                data       = excluded.data,
+                user_id    = excluded.user_id,
+                expires_at = excluded.expires_at",
         )
         .bind(&self.id)
         .bind(&data)
+        .bind(&self.user_id)
         .bind(&expires)
         .execute(&self.pool)
         .await;
@@ -172,8 +179,8 @@ pub async fn delete_expired(pool: &SqlitePool) {
 fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     let cookie = headers.get("cookie")?.to_str().ok()?;
     cookie.split(';').find_map(|part| {
-        let part    = part.trim();
-        let (k, v)  = part.split_once('=')?;
+        let part   = part.trim();
+        let (k, v) = part.split_once('=')?;
         if k.trim() == name { Some(v.trim().to_string()) } else { None }
     })
 }
