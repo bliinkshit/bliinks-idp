@@ -88,6 +88,7 @@ async fn main() -> Result<(), AppError> {
         .route("/settings/display-name",  post(routes::settings::handle_display_name))
         .route("/settings/color",         post(routes::settings::handle_color))
         .route("/settings/reset",         post(routes::settings::handle_reset))
+        .route("/settings/avatar",        post(routes::avatar::handle_upload))
         .layer(axum_middleware::from_fn(middleware::require_auth));
 
     let oauth_routes = Router::new()
@@ -101,6 +102,7 @@ async fn main() -> Result<(), AppError> {
         .route("/auth",           get(routes::auth::render_redirect))
         .route("/auth/reset",     get(routes::auth::render_reset))
         .route("/auth/reset",     post(routes::auth::handle_reset))
+        .route("/avatars/:user_id", get(routes::avatar::handle_serve))
         .merge(guest_routes)
         .merge(protected_routes)
         .merge(admin_routes)

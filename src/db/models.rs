@@ -4,14 +4,15 @@ use sqlx::FromRow;
 
 #[derive(Debug, Clone, FromRow, Serialize)]
 pub struct User {
-    pub id:           String,
-    pub username:     String,
-    pub password:     String,
-    pub approved:     bool,
-    pub admin:        bool,
-    pub display_name: Option<String>,
-    pub color:        Option<String>,
-    pub date_created: String,
+    pub id:                String,
+    pub username:          String,
+    pub password:          String,
+    pub approved:          bool,
+    pub admin:             bool,
+    pub display_name:      Option<String>,
+    pub color:             Option<String>,
+    pub avatar_updated_at: Option<String>,
+    pub date_created:      String,
 }
 
 #[derive(Debug, Clone, FromRow)]

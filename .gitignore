@@ -24,3 +24,5 @@ Cargo.lock
 # Custom
 config.toml
 *.db
+*.db-journal
+uploads/*

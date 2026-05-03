@@ -6,6 +6,13 @@
 <h1>Settings</h1>
 <p>Logged in as <strong>{{ username }}</strong></p>
 
+<h2>Avatar</h2>
+{% if success_avatar %}<p>{{ success_avatar }}</p>{% endif %}
+<form action="/settings/avatar" method="POST" enctype="multipart/form-data">
+    <input type="file" name="avatar" accept="image/*" required>
+    <input type="submit" value="Upload">
+</form>
+
 <h2>Display Name</h2>
 {% if success_profile %}<p>{{ success_profile }}</p>{% endif %}
 {% if error %}<p>{{ error }}</p>{% endif %}

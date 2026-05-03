@@ -391,6 +391,8 @@ pub struct UserinfoResponse {
     pub display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color:        Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture:      Option<String>,
 }
 
 pub async fn handle_userinfo(
@@ -424,11 +426,21 @@ pub async fn handle_userinfo(
 
     let has_profile = scopes::contains(&stored.scopes, scopes::PROFILE);
 
+    let picture = if has_profile && user.avatar_updated_at.is_some() {
+        let host   = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+        let scheme = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or("http");
+        let ts     = user.avatar_updated_at.as_deref().unwrap_or("");
+        Some(format!("{}://{}/avatars/{}?v={}", scheme, host, user.id, ts))
+    } else {
+        None
+    };
+
     Json(UserinfoResponse {
         sub:          user.id,
         username:     user.username,
         display_name: if has_profile { user.display_name } else { None },
         color:        if has_profile { user.color } else { None },
+        picture,
     })
     .into_response()
 }

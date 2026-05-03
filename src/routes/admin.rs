@@ -19,7 +19,6 @@ use crate::{
     db::{
         oauth_queries::{
             add_redirect_uri, create_client, delete_client, get_all_clients,
-            get_client_redirect_uris,
         },
         queries::{
             delete_sessions_for_user, get_all_users, issue_password_reset, set_user_admin,

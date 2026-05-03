@@ -1,12 +1,13 @@
 CREATE TABLE IF NOT EXISTS users (
-    id           TEXT PRIMARY KEY NOT NULL,
-    username     TEXT NOT NULL UNIQUE,
-    password     TEXT NOT NULL,
-    approved     INTEGER NOT NULL DEFAULT 0,
-    admin        INTEGER NOT NULL DEFAULT 0,
-    color        TEXT,
-    display_name TEXT,
-    date_created TEXT NOT NULL
+    id                TEXT PRIMARY KEY NOT NULL,
+    username          TEXT NOT NULL UNIQUE,
+    password          TEXT NOT NULL,
+    approved          INTEGER NOT NULL DEFAULT 0,
+    admin             INTEGER NOT NULL DEFAULT 0,
+    color             TEXT,
+    display_name      TEXT,
+    avatar_updated_at TEXT,
+    date_created      TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -40,13 +41,13 @@ CREATE TABLE IF NOT EXISTS oauth_client_redirects (
 );
 
 CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
-    code        TEXT PRIMARY KEY,
-    client_id   TEXT NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
-    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code         TEXT PRIMARY KEY,
+    client_id    TEXT NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     redirect_uri TEXT NOT NULL,
-    scopes      TEXT NOT NULL,
-    expires_at  TEXT NOT NULL,
-    used_at     TEXT
+    scopes       TEXT NOT NULL,
+    expires_at   TEXT NOT NULL,
+    used_at      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS oauth_tokens (

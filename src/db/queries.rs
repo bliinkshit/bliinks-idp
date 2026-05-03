@@ -32,7 +32,7 @@ pub async fn get_user_by_username(
     username: &str,
 ) -> Result<Option<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, date_created
+        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created
          FROM users WHERE username = ?",
     )
     .bind(username)
@@ -46,7 +46,7 @@ pub async fn get_user_by_id(
     id:   &str,
 ) -> Result<Option<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, date_created
+        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created
          FROM users WHERE id = ?",
     )
     .bind(id)
@@ -145,7 +145,7 @@ pub async fn delete_expired_password_resets(pool: &SqlitePool) {
 }
 pub async fn get_all_users(pool: &SqlitePool) -> Result<Vec<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, date_created
+        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created
          FROM users ORDER BY date_created ASC",
     )
     .fetch_all(pool)
@@ -235,6 +235,20 @@ pub async fn update_user_color(
 ) -> Result<(), AppError> {
     sqlx::query("UPDATE users SET color = ? WHERE id = ?")
         .bind(color)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(())
+}
+
+pub async fn set_avatar_updated_at(
+    pool:    &SqlitePool,
+    user_id: &str,
+    ts:      &str,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE users SET avatar_updated_at = ? WHERE id = ?")
+        .bind(ts)
         .bind(user_id)
         .execute(pool)
         .await
