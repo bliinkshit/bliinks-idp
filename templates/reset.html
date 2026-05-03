@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1>haii omg haii :3</h1>
+<h2>Reset password</h2>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if success %}<p class="success">{{ success }}</p>{% endif %}
+
+{% if token %}
+	<form action="/auth/reset" method="POST">
+	    <input type="hidden" name="token" value="{{ token }}">
+	    <input type="password" name="password" placeholder="New password">
+	    <input type="password" name="password-repeat" placeholder="Repeat new password">
+	    <input type="submit" value="Submit">
+	</form>
+{% endif %}
+
+{% endblock %}

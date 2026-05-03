@@ -67,8 +67,6 @@ async fn main() -> Result<(), AppError> {
         .route("/auth/register",  post(routes::auth::handle_register))
         .route("/auth/login",     get(routes::auth::render_login))
         .route("/auth/login",     post(routes::auth::handle_login))
-        .route("/auth/reset",     get(routes::auth::render_reset))
-        .route("/auth/reset",     post(routes::auth::handle_reset))
         .route("/captcha",        get(routes::captcha::render_captcha))
         .layer(axum_middleware::from_fn(middleware::redirect_if_authed));
 
@@ -79,6 +77,8 @@ async fn main() -> Result<(), AppError> {
 
     let app = Router::new()
         .route("/auth",           get(routes::auth::render_redirect))
+        .route("/auth/reset",     get(routes::auth::render_reset))
+        .route("/auth/reset",     post(routes::auth::handle_reset))
         .merge(guest_routes)
         .merge(protected_routes)
         .fallback(routes::serve::static_or_error)

@@ -64,7 +64,7 @@ pub struct LoginQuery {
 
 #[derive(Deserialize)]
 pub struct TokenQuery {
-    pub token: String,
+    pub token: Option<String>,
 }
 
 fn hash_input(input: &str) -> String {
@@ -131,8 +131,12 @@ pub async fn render_register(
 pub async fn render_reset(
     State(state): State<Arc<AppState>>,
     Query(query): Query<TokenQuery>,
-) -> Result<Html<String>, AppErrorResponse> {
-    let token_hash = hash_input(&query.token);
+) -> Result<Response, AppErrorResponse> {
+    let Some(token) = query.token else {
+        return Ok(Redirect::to("/auth/login").into_response());
+    };
+
+    let token_hash = hash_input(&token);
     let valid = get_password_reset(&state.pool, &token_hash)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
@@ -140,13 +144,13 @@ pub async fn render_reset(
 
     let mut ctx = Context::new();
     if valid {
-        ctx.insert("token", &query.token);
+        ctx.insert("token", &token);
     } else {
         ctx.insert("error", "This reset link is invalid or has expired.");
     }
 
     render(&state.tera, "reset.html", &mut ctx, Instant::now())
-        .map(Html)
+        .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
 
