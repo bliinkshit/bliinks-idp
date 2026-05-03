@@ -426,8 +426,8 @@ pub async fn handle_userinfo(
 
     Json(UserinfoResponse {
         sub:          user.id,
-        username:     user.username.clone(),
-        display_name: if has_profile { Some(user.username) } else { None },
+        username:     user.username,
+        display_name: if has_profile { user.display_name } else { None },
         color:        if has_profile { user.color } else { None },
     })
     .into_response()

@@ -9,6 +9,7 @@ pub struct User {
     pub password:     String,
     pub approved:     bool,
     pub admin:        bool,
+    pub display_name: Option<String>,
     pub color:        Option<String>,
     pub date_created: String,
 }
