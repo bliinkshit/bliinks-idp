@@ -8,7 +8,7 @@ use axum::{
 };
 
 use crate::{
-    db::queries::get_user_by_username,
+    db::queries::get_user_by_id,
     session::Session,
     routes::auth::USER_SESSION_KEY,
     AppState,
@@ -47,7 +47,7 @@ pub async fn require_admin(
         None => return Redirect::to("/auth/login").into_response(),
     };
 
-    let user = match get_user_by_username(&state.pool, &user_id).await {
+    let user = match get_user_by_id(&state.pool, &user_id).await {
         Ok(Some(u)) => u,
         _ => return Redirect::to("/auth/login").into_response(),
     };

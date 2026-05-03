@@ -143,3 +143,73 @@ pub async fn delete_expired_password_resets(pool: &SqlitePool) {
     .execute(pool)
     .await;
 }
+pub async fn get_all_users(pool: &SqlitePool) -> Result<Vec<User>, AppError> {
+    sqlx::query_as::<_, User>(
+        "SELECT id, username, password, approved, admin, color, date_created
+         FROM users ORDER BY date_created ASC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))
+}
+
+pub async fn set_user_approved(
+    pool:    &SqlitePool,
+    user_id: &str,
+    approved: bool,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE users SET approved = ? WHERE id = ?")
+        .bind(approved)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(())
+}
+
+pub async fn issue_password_reset(
+    pool:     &SqlitePool,
+    user_id:  &str,
+    base_url: &str,
+) -> Result<String, AppError> {
+    use rand::RngCore;
+    use argon2::password_hash::rand_core::OsRng;
+    use sha2::{Digest, Sha256};
+
+    let mut raw = [0u8; 32];
+    OsRng.fill_bytes(&mut raw);
+    let token      = hex::encode(raw);
+    let token_hash = hex::encode(Sha256::digest(token.trim().as_bytes()));
+    let expires    = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+
+    sqlx::query(
+        "INSERT INTO password_resets (token_hash, user_id, expires_at, used_at)
+         VALUES (?, ?, ?, NULL)
+         ON CONFLICT(token_hash) DO UPDATE SET
+            user_id    = excluded.user_id,
+            expires_at = excluded.expires_at,
+            used_at    = NULL",
+    )
+    .bind(&token_hash)
+    .bind(user_id)
+    .bind(&expires)
+    .execute(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(format!("{}/auth/reset?token={}", base_url.trim_end_matches('/'), token))
+}
+
+pub async fn set_user_admin(
+    pool:    &SqlitePool,
+    user_id: &str,
+    admin:   bool,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE users SET admin = ? WHERE id = ?")
+        .bind(admin)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(())
+}

@@ -11,7 +11,6 @@ use axum::{
     http::header,
     response::{Html, IntoResponse, Redirect, Response},
 };
-use rand::RngCore;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tera::Context;
@@ -19,7 +18,7 @@ use uuid::Uuid;
 
 use crate::{
     db::queries::{
-        create_password_reset, create_user, delete_sessions_for_user, get_password_reset,
+        create_user, delete_sessions_for_user, get_password_reset,
         get_user_by_id, get_user_by_username, mark_password_reset_used, update_user_password,
     },
     error::{AppError, AppErrorResponse},
@@ -30,7 +29,6 @@ use crate::{
 };
 
 pub const USER_SESSION_KEY: &str = "user_id";
-const RESET_TOKEN_BYTES: usize   = 32;
 
 #[derive(Deserialize)]
 pub struct LoginForm {
@@ -87,21 +85,6 @@ macro_rules! render_err {
     }};
 }
 
-// to-do: deliver reset token hash
-pub async fn issue_password_reset(
-    pool:     &sqlx::SqlitePool,
-    user_id:  &str,
-    base_url: &str,
-) -> Result<String, AppError> {
-    let mut raw = [0u8; RESET_TOKEN_BYTES];
-    OsRng.fill_bytes(&mut raw);
-    let token      = hex::encode(raw);
-    let token_hash = hash_input(&token);
-
-    create_password_reset(pool, &token_hash, user_id).await?;
-
-    Ok(format!("{}/auth/reset?token={}", base_url.trim_end_matches('/'), token))
-}
 
 pub async fn render_redirect() -> Redirect {
     Redirect::to("/auth/login")
@@ -193,11 +176,7 @@ pub async fn handle_login(
     session.insert(USER_SESSION_KEY, &user.id);
     session.save().await;
 
-    ctx.insert("success", "Logged in successfully!");
-    let html = render(&state.tera, "login.html", &mut ctx, Instant::now())
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
-
-    let mut response = Html(html).into_response();
+    let mut response = Redirect::to("/").into_response();
     let headers      = response.headers_mut();
     headers.append(header::SET_COOKIE, session.cookie_header(secure));
     if remember {
@@ -269,7 +248,7 @@ pub async fn handle_register(
 }
 
 pub async fn handle_reset(
-    mut session:  Session,
+    session:      Session,
     State(state): State<Arc<AppState>>,
     Form(form):   Form<ResetForm>,
 ) -> Result<Response, AppErrorResponse> {

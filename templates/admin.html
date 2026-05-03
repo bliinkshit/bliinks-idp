@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h1>Admin Panel</h1>
+
+{% if error %}<p>Error: {{ error }}</p>{% endif %}
+{% if success %}<p>{{ success }}</p>{% endif %}
+{% if reset_url %}<p>Reset link: <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
+
+<h2>Users</h2>
+
+{% if users %}
+<table border="1" cellpadding="4" cellspacing="0">
+    <tr>
+        <th>Username</th>
+        <th>ID</th>
+        <th>Admin</th>
+        <th>Approved</th>
+        <th>Created</th>
+        <th>Actions</th>
+    </tr>
+    {% for user in users %}
+    <tr>
+        <td>{{ user.username }}</td>
+        <td>{{ user.id }}</td>
+        <td>{% if user.admin %}Yes{% else %}No{% endif %}</td>
+        <td>{% if user.approved %}Yes{% else %}No{% endif %}</td>
+        <td>{{ user.date_created }}</td>
+        <td>
+            {% if user.approved %}
+            <form action="/admin/approve" method="POST">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="hidden" name="approved" value="0">
+                <input type="submit" value="Disapprove">
+            </form>
+            {% else %}
+            <form action="/admin/approve" method="POST">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="hidden" name="approved" value="1">
+                <input type="submit" value="Approve">
+            </form>
+            {% endif %}
+
+            {% if user.admin %}
+            <form action="/admin/toggle-admin" method="POST">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="hidden" name="admin" value="0">
+                <input type="submit" value="Revoke Admin">
+            </form>
+            {% else %}
+            <form action="/admin/toggle-admin" method="POST">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="hidden" name="admin" value="1">
+                <input type="submit" value="Make Admin">
+            </form>
+            {% endif %}
+
+            <form action="/admin/reset" method="POST">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="submit" value="Issue Reset Link">
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<p>No users found.</p>
+{% endif %}
+
+{% endblock %}

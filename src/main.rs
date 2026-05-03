@@ -70,6 +70,13 @@ async fn main() -> Result<(), AppError> {
         .route("/captcha",        get(routes::captcha::render_captcha))
         .layer(axum_middleware::from_fn(middleware::redirect_if_authed));
 
+    let admin_routes = Router::new()
+        .route("/admin",               get(routes::admin::render_admin))
+        .route("/admin/approve",       post(routes::admin::handle_approve))
+        .route("/admin/toggle-admin",  post(routes::admin::handle_toggle_admin))
+        .route("/admin/reset",         post(routes::admin::handle_issue_reset))
+        .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::require_admin));
+
     let protected_routes = Router::new()
         .route("/",               get(routes::index::render_index))
         .route("/auth/logout",    get(routes::auth::handle_logout))
@@ -81,6 +88,7 @@ async fn main() -> Result<(), AppError> {
         .route("/auth/reset",     post(routes::auth::handle_reset))
         .merge(guest_routes)
         .merge(protected_routes)
+        .merge(admin_routes)
         .fallback(routes::serve::static_or_error)
         .layer(axum_middleware::from_fn_with_state(state.clone(), inject_pool))
         .with_state(state);
