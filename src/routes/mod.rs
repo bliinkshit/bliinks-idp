@@ -5,3 +5,4 @@ pub mod serve;
 pub mod captcha;
 pub mod auth;
 pub mod admin;
+pub mod oauth;

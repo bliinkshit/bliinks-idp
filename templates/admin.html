@@ -8,9 +8,13 @@
 {% if error %}<p>Error: {{ error }}</p>{% endif %}
 {% if success %}<p>{{ success }}</p>{% endif %}
 {% if reset_url %}<p>Reset link: <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
+{% if new_client_id %}
+<p>Client created. Save these now - the secret will not be shown again.</p>
+<p>Client ID: {{ new_client_id }}</p>
+<p>Client Secret: {{ new_client_secret }}</p>
+{% endif %}
 
 <h2>Users</h2>
-
 {% if users %}
 <table border="1" cellpadding="4" cellspacing="0">
     <tr>
@@ -67,6 +71,40 @@
 </table>
 {% else %}
 <p>No users found.</p>
+{% endif %}
+
+<h2>OAuth Clients</h2>
+<h3>Register New Client</h3>
+<form action="/admin/clients/create" method="POST">
+    <input type="text"   name="name"         placeholder="App name" required>
+    <input type="text"   name="redirect_uri"  placeholder="Redirect URI" required>
+    <input type="submit" value="Create Client">
+</form>
+
+{% if clients %}
+<table border="1" cellpadding="4" cellspacing="0">
+    <tr>
+        <th>Name</th>
+        <th>Client ID</th>
+        <th>Created</th>
+        <th>Actions</th>
+    </tr>
+    {% for client in clients %}
+    <tr>
+        <td>{{ client.name }}</td>
+        <td>{{ client.id }}</td>
+        <td>{{ client.created_at }}</td>
+        <td>
+            <form action="/admin/clients/delete" method="POST">
+                <input type="hidden" name="client_id" value="{{ client.id }}">
+                <input type="submit" value="Delete">
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<p>No OAuth clients registered.</p>
 {% endif %}
 
 {% endblock %}

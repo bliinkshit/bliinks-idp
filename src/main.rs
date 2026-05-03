@@ -3,6 +3,7 @@ mod cfg;
 mod db;
 mod error;
 mod middleware;
+mod oauth;
 mod render;
 mod routes;
 mod session;
@@ -59,6 +60,7 @@ async fn main() -> Result<(), AppError> {
             interval.tick().await;
             delete_expired(&cleanup_pool).await;
             delete_expired_password_resets(&cleanup_pool).await;
+            db::oauth_queries::delete_expired_oauth(&cleanup_pool).await;
         }
     });
 
@@ -71,16 +73,25 @@ async fn main() -> Result<(), AppError> {
         .layer(axum_middleware::from_fn(middleware::redirect_if_authed));
 
     let admin_routes = Router::new()
-        .route("/admin",               get(routes::admin::render_admin))
-        .route("/admin/approve",       post(routes::admin::handle_approve))
-        .route("/admin/toggle-admin",  post(routes::admin::handle_toggle_admin))
-        .route("/admin/reset",         post(routes::admin::handle_issue_reset))
+        .route("/admin",                  get(routes::admin::render_admin))
+        .route("/admin/approve",          post(routes::admin::handle_approve))
+        .route("/admin/toggle-admin",     post(routes::admin::handle_toggle_admin))
+        .route("/admin/reset",            post(routes::admin::handle_issue_reset))
+        .route("/admin/clients/create",   post(routes::admin::handle_create_client))
+        .route("/admin/clients/delete",   post(routes::admin::handle_delete_client))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::require_admin));
 
     let protected_routes = Router::new()
         .route("/",               get(routes::index::render_index))
         .route("/auth/logout",    get(routes::auth::handle_logout))
         .layer(axum_middleware::from_fn(middleware::require_auth));
+
+    let oauth_routes = Router::new()
+        .route("/oauth/authorize",    get(routes::oauth::render_authorize))
+        .route("/oauth/authorize",    post(routes::oauth::handle_authorize))
+        .route("/oauth/token",        post(routes::oauth::handle_token))
+        .route("/oauth/token/revoke", post(routes::oauth::handle_revoke))
+        .route("/oauth/userinfo",     get(routes::oauth::handle_userinfo));
 
     let app = Router::new()
         .route("/auth",           get(routes::auth::render_redirect))
@@ -89,6 +100,7 @@ async fn main() -> Result<(), AppError> {
         .merge(guest_routes)
         .merge(protected_routes)
         .merge(admin_routes)
+        .merge(oauth_routes)
         .fallback(routes::serve::static_or_error)
         .layer(axum_middleware::from_fn_with_state(state.clone(), inject_pool))
         .with_state(state);

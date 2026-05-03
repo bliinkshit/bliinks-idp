@@ -1,6 +1,7 @@
 // src/db/mod.rs
 pub mod models;
 pub mod queries;
+pub mod oauth_queries;
 
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
