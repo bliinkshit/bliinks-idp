@@ -13,11 +13,12 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use tower_http::trace::TraceLayer;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tera::Tera;
 use tracing::{info, warn};
-use tracing_subscriber;
+use tracing_subscriber::{EnvFilter, fmt};
 
 use cfg::CONFIG;
 use db::init_pool;
@@ -40,7 +41,7 @@ async fn inject_pool(
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
-    tracing_subscriber::fmt().init();
+    fmt().with_env_filter(EnvFilter::new("bliinks_idp=debug,tower_http=debug")).init();
 
     if CONFIG.general.dev {
         warn!("DEV_MODE is enabled");
@@ -79,6 +80,12 @@ async fn main() -> Result<(), AppError> {
         .fallback(routes::serve::static_or_error)
         .layer(axum_middleware::from_fn_with_state(state.clone(), inject_pool))
         .with_state(state);
+
+    let app = if CONFIG.general.dev {
+        app.layer(TraceLayer::new_for_http())
+    } else {
+        app
+    };
 
     let listener = tokio::net::TcpListener::bind(CONFIG.server.addr()).await?;
     info!("listening on http://{}", CONFIG.server.addr());
