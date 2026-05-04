@@ -18,6 +18,7 @@
 {% if users %}
 <table border="1" cellpadding="4" cellspacing="0">
     <tr>
+        <th>Avatar</th>
         <th>Username</th>
         <th>ID</th>
         <th>Admin</th>
@@ -27,6 +28,7 @@
     </tr>
     {% for user in users %}
     <tr>
+        <td>{% if user.avatar_updated_at %}<img src="/avatars/{{ user.id }}">{% else %}None{% endif %}</td>
         <td>{{ user.username }}</td>
         <td>{{ user.id }}</td>
         <td>{% if user.admin %}Yes{% else %}No{% endif %}</td>

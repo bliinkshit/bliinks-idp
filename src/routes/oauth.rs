@@ -98,7 +98,6 @@ async fn verify_client(
     Ok(client)
 }
 
-// GET /oauth/authorize
 #[derive(Deserialize)]
 pub struct AuthorizeQuery {
     pub client_id:     String,
@@ -162,7 +161,6 @@ pub async fn render_authorize(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
 
-// POST /oauth/authorize
 #[derive(Deserialize)]
 pub struct AuthorizeForm {
     pub client_id:    String,
@@ -229,7 +227,6 @@ pub async fn handle_authorize(
     Ok(Redirect::to(&url).into_response())
 }
 
-// POST /oauth/token
 #[derive(Deserialize)]
 pub struct TokenForm {
     pub grant_type:    String,
@@ -352,7 +349,6 @@ async fn issue_token_pair(
     .into_response()
 }
 
-// POST /oauth/token/revoke
 #[derive(Deserialize)]
 pub struct RevokeForm {
     pub token:         String,
@@ -382,7 +378,6 @@ pub async fn handle_revoke(
     StatusCode::OK.into_response()
 }
 
-// GET /oauth/userinfo
 #[derive(Serialize)]
 pub struct UserinfoResponse {
     pub sub:          String,
@@ -393,6 +388,7 @@ pub struct UserinfoResponse {
     pub color:        Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub picture:      Option<String>,
+    pub date_created: String,
 }
 
 pub async fn handle_userinfo(
@@ -441,6 +437,7 @@ pub async fn handle_userinfo(
         display_name: if has_profile { user.display_name } else { None },
         color:        if has_profile { user.color } else { None },
         picture,
+        date_created: user.date_created,
     })
     .into_response()
 }
