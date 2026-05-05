@@ -28,7 +28,8 @@ use crate::{
     AppState,
 };
 
-pub const USER_SESSION_KEY: &str = "user_id";
+pub const USER_SESSION_KEY:  &str = "user_id";
+pub const OAUTH_NEXT_KEY:    &str = "oauth_next";
 
 #[derive(Deserialize)]
 pub struct LoginForm {
@@ -170,13 +171,17 @@ pub async fn handle_login(
         render_err!(state, "login.html", ctx, "Your account is pending admin approval.");
     }
 
+    let next: Option<String> = session.get(OAUTH_NEXT_KEY);
+
     session.remember = remember;
     session.user_id  = Some(user.id.clone());
     session.regenerate().await;
     session.insert(USER_SESSION_KEY, &user.id);
+    session.remove(OAUTH_NEXT_KEY);
     session.save().await;
 
-    let mut response = Redirect::to("/").into_response();
+    let dest         = next.as_deref().unwrap_or("/");
+    let mut response = Redirect::to(dest).into_response();
     let headers      = response.headers_mut();
     headers.append(header::SET_COOKIE, session.cookie_header(secure));
     if remember {

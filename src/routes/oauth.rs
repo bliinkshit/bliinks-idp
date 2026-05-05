@@ -26,7 +26,7 @@ use crate::{
         token::{self, ACCESS_TOKEN_TTL_MINUTES},
     },
     render::render,
-    routes::auth::USER_SESSION_KEY,
+    routes::auth::{USER_SESSION_KEY, OAUTH_NEXT_KEY},
     session::Session,
     AppState,
 };
@@ -108,11 +108,25 @@ pub struct AuthorizeQuery {
 }
 
 pub async fn render_authorize(
-    session:      Session,
+    mut session:  Session,
     State(state): State<Arc<AppState>>,
     Query(query): Query<AuthorizeQuery>,
 ) -> Result<Response, AppErrorResponse> {
     if session.get::<String>(USER_SESSION_KEY).is_none() {
+        let mut next = format!(
+            "/oauth/authorize?client_id={}&redirect_uri={}&response_type={}",
+            urlencoding::encode(&query.client_id),
+            urlencoding::encode(&query.redirect_uri),
+            urlencoding::encode(&query.response_type),
+        );
+        if let Some(scope) = &query.scope {
+            next.push_str(&format!("&scope={}", urlencoding::encode(scope)));
+        }
+        if let Some(state_val) = &query.state {
+            next.push_str(&format!("&state={}", urlencoding::encode(state_val)));
+        }
+        session.insert(OAUTH_NEXT_KEY, &next);
+        session.save().await;
         return Ok(Redirect::to("/auth/login").into_response());
     }
 

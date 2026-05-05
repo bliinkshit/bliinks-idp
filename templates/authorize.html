@@ -8,9 +8,9 @@
 
 <h2>This app will be able to see:</h2>
 <ul>
-    <li>Your user ID and username</li>
+    <li>Your user ID, username, and account creation date</li>
     {% if has_profile %}
-    <li>Your display name and colour</li>
+    <li>Your display name, colour, and avatar</li>
     {% endif %}
 </ul>
 
@@ -19,8 +19,7 @@
     <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
     <input type="hidden" name="scope"        value="{{ scope }}">
     <input type="hidden" name="state"        value="{{ state }}">
-
-    <input type="hidden" name="action" value="approve">
+    <input type="hidden" name="action"       value="approve">
     <input type="submit" value="Approve">
 </form>
 
@@ -29,8 +28,7 @@
     <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
     <input type="hidden" name="scope"        value="{{ scope }}">
     <input type="hidden" name="state"        value="{{ state }}">
-
-    <input type="hidden" name="action" value="deny">
+    <input type="hidden" name="action"       value="deny">
     <input type="submit" value="Deny">
 </form>
 {% endblock %}
