@@ -33,7 +33,7 @@ pub async fn get_user_by_username(
 ) -> Result<Option<User>, AppError> {
     sqlx::query_as::<_, User>(
         "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created
-         FROM users WHERE username = ?",
+         FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
     .fetch_optional(pool)
