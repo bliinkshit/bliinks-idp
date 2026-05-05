@@ -2,6 +2,11 @@
 name    = "bliinks-idp"
 version = "0.1.0"
 edition = "2021"
+default-run = "bliinks-idp"
+
+[[bin]]
+name = "migrate_legacy"
+path = "src/bin/migrate_legacy.rs"
 
 [dependencies]
 axum = { version = "0.7", features = ["multipart", "macros"] }
@@ -28,4 +33,4 @@ hex = "0.4"
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
 gif   = "0.13"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }

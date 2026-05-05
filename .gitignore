@@ -25,4 +25,5 @@ Cargo.lock
 config.toml
 *.db
 *.db-journal
+*.json
 uploads/*
