@@ -21,6 +21,7 @@ use crate::{
         create_user, delete_sessions_for_user, get_password_reset,
         get_user_by_id, get_user_by_username, mark_password_reset_used, update_user_password,
     },
+    db::oauth_queries::revoke_all_tokens_for_user,
     error::{AppError, AppErrorResponse},
     render::render,
     routes::captcha::CAPTCHA_SESSION_KEY,
@@ -298,6 +299,10 @@ pub async fn handle_reset(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     delete_sessions_for_user(&state.pool, &user.id)
+        .await
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+    revoke_all_tokens_for_user(&state.pool, &user.id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 

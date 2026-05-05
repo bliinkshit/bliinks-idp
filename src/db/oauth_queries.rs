@@ -99,7 +99,7 @@ pub async fn create_authorization_code(
     redirect_uri: &str,
     scopes:       &str,
 ) -> Result<(), AppError> {
-    let expires = (Utc::now() + chrono::Duration::minutes(10)).to_rfc3339();
+    let expires = (Utc::now() + chrono::Duration::minutes(crate::oauth::token::AUTH_CODE_TTL_MINUTES)).to_rfc3339();
 
     sqlx::query(
         "INSERT INTO oauth_authorization_codes
@@ -216,11 +216,23 @@ pub async fn revoke_tokens_for_user_and_client(
     sqlx::query(
         "DELETE FROM oauth_tokens WHERE user_id = ? AND client_id = ?",
     )
-    .bind(user_id)
-    .bind(client_id)
-    .execute(pool)
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))?;
+        .bind(user_id)
+        .bind(client_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(())
+}
+
+pub async fn revoke_all_tokens_for_user(
+    pool:      &SqlitePool,
+    user_id:   &str,
+) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM oauth_tokens WHERE user_id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
     Ok(())
 }
 
