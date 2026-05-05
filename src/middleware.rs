@@ -9,6 +9,7 @@ use axum::{
 
 use crate::{
     db::queries::get_user_by_id,
+    error::{AppError, AppErrorResponse},
     session::Session,
     routes::auth::USER_SESSION_KEY,
     AppState,
@@ -53,7 +54,7 @@ pub async fn require_admin(
     };
 
     if !user.admin {
-        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+        return AppErrorResponse(state, AppError::Forbidden).into_response();
     }
 
     next.run(req).await
