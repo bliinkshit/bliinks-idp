@@ -21,8 +21,8 @@ Request only what you need:
 
 | Scope | What you get |
 |-------|-------------|
-| `openid` | User's ID (`sub`) and username. Required. |
-| `profile` | Display name and colour preference. |
+| `openid` | User's ID (`sub`), username, and account creation date. Required. |
+| `profile` | Display name, colour preference, and avatar (if set). |
 
 ---
 
@@ -98,7 +98,8 @@ Response for `openid` scope:
 ```json
 {
   "sub": "user-uuid",
-  "username": "salem"
+  "username": "salem",
+  "date_created": "2024-01-15T10:30:00Z"
 }
 ```
 
@@ -108,10 +109,14 @@ Response for `openid profile` scope:
 {
   "sub": "user-uuid",
   "username": "salem",
+  "date_created": "2024-01-15T10:30:00Z",
   "display_name": "Salem",
-  "color": "#ff6b6b"
+  "color": "#ff6b6b",
+  "picture": "https://bliinks.net/avatars/user-uuid?v=2024-01-15T10:30:00Z"
 }
 ```
+
+`picture` is omitted if the user has not set an avatar.
 
 Use `sub` as the user's unique identifier in your own database. Do not use `username` as a key since it may change in the future.
 
@@ -242,6 +247,114 @@ app.get('/callback', async (req, res) => {
 
   res.redirect('/');
 });
+```
+
+---
+
+## Example: Go (Fiber)
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/session"
+)
+
+var (
+	store        = session.New()
+	baseURL      = "https://bliinks.net"
+	clientID     = os.Getenv("CLIENT_ID")
+	clientSecret = os.Getenv("CLIENT_SECRET")
+	redirectURI  = "https://yourapp.com/callback"
+)
+
+func main() {
+	app := fiber.New()
+
+	app.Get("/login", handleLogin)
+	app.Get("/callback", handleCallback)
+
+	app.Listen(":3000")
+}
+
+func handleLogin(c *fiber.Ctx) error {
+	sess, err := store.Get(c)
+	if err != nil {
+		return err
+	}
+
+	state := fmt.Sprintf("%x", make([]byte, 16))
+	sess.Set("oauth_state", state)
+	sess.Save()
+
+	params := url.Values{
+		"client_id":     {clientID},
+		"redirect_uri":  {redirectURI},
+		"response_type": {"code"},
+		"scope":         {"openid profile"},
+		"state":         {state},
+	}
+
+	return c.Redirect(baseURL + "/oauth/authorize?" + params.Encode())
+}
+
+func handleCallback(c *fiber.Ctx) error {
+	sess, err := store.Get(c)
+	if err != nil {
+		return err
+	}
+
+	if c.Query("state") != sess.Get("oauth_state") {
+		return c.Status(400).SendString("State mismatch")
+	}
+	if c.Query("error") != "" {
+		return c.Status(400).SendString("Access denied")
+	}
+
+	tokenRes, err := http.PostForm(baseURL+"/oauth/token", url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {c.Query("code")},
+		"redirect_uri":  {redirectURI},
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
+	})
+	if err != nil {
+		return err
+	}
+	defer tokenRes.Body.Close()
+
+	var tokens struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	json.NewDecoder(tokenRes.Body).Decode(&tokens)
+
+	req, _ := http.NewRequest("GET", baseURL+"/oauth/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	userRes, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer userRes.Body.Close()
+
+	body, _ := io.ReadAll(userRes.Body)
+
+	sess.Set("user", string(body))
+	sess.Set("access_token", tokens.AccessToken)
+	sess.Set("refresh_token", tokens.RefreshToken)
+	sess.Save()
+
+	return c.Redirect("/")
+}
 ```
 
 ---
