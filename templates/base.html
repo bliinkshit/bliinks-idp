@@ -7,8 +7,10 @@
         <title>{% block title %}App{% endblock %}</title>
     </head>
     <body>
+        {% include "partials/header.html" %}
+
         {% block content %}{% endblock %}
 
-        <div>page has {{ gen_phrase }} in {{ gen_time_secs }}s</div>
+        {% include "partials/footer.html" %}
     </body>
 </html>
