@@ -15,7 +15,10 @@
 		<input type="password" name="password" id="password" placeholder="Password"><br>
 		<input type="password" name="password-repeat" id="password-repeat" placeholder="Repeat password"><br>
 		
-		<img src="/captcha"><br>
+		<img id="captcha_image" src="/captcha" alt="Captcha"><br>
+		<a href="/auth/register" class="captcha__button" id="captcha_refresh">
+		    Refresh
+		</a><br>
 		<input type="text" name="captcha" id="captcha" placeholder="CAPTCHA"><br>
 
 		<input type="submit" name="submit" value="Submit">
@@ -25,4 +28,6 @@
 		Already have an account? <a href="/auth/login">Login</a>
 	</p>
 </div>
+
+<script src="/captcha.js"></script>
 {% endblock %}

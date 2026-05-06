@@ -14,7 +14,10 @@
 		<input type="username" name="username" id="username" placeholder="Username"><br>
 		<input type="password" name="password" id="password" placeholder="Password"><br>
 
-		<img src="/captcha"><br>
+		<img id="captcha_image" src="/captcha" alt="Captcha"><br>
+		<a href="/auth/login" class="captcha__button" id="captcha_refresh">
+		    Refresh
+		</a><br>
 		<input type="text" name="captcha" id="captcha" placeholder="CAPTCHA"><br>
 
 		<input type="checkbox" id="remember" name="remember" value="remember">
@@ -27,4 +30,6 @@
 		Don't have an account? <a href="/auth/register">Register</a>
 	</p>
 </div>
+
+<script src="/captcha.js"></script>
 {% endblock %}
