@@ -10,3 +10,10 @@ html, body {
 body {
 	margin: 0px;
 }
+
+.container {
+	width: 100%;
+	max-width: 970px;
+	margin: 0 auto;
+	padding: 0 20px;
+}

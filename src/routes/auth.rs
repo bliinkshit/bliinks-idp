@@ -100,7 +100,7 @@ pub async fn render_login(
     if query.reset.as_deref() == Some("1") {
         ctx.insert("success", "Password reset! You can now log in with your new password.");
     }
-    render(&state.tera, "login.html", &mut ctx, Instant::now())
+    render(&state.tera, "auth/login.html", &mut ctx, Instant::now())
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -108,7 +108,7 @@ pub async fn render_login(
 pub async fn render_register(
     State(state): State<Arc<AppState>>,
 ) -> Result<Html<String>, AppErrorResponse> {
-    render(&state.tera, "register.html", &mut Context::new(), Instant::now())
+    render(&state.tera, "auth/register.html", &mut Context::new(), Instant::now())
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -134,7 +134,7 @@ pub async fn render_reset(
         ctx.insert("error", "This reset link is invalid or has expired.");
     }
 
-    render(&state.tera, "reset.html", &mut ctx, Instant::now())
+    render(&state.tera, "auth/reset.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -149,7 +149,7 @@ pub async fn handle_login(
     let mut ctx  = Context::new();
 
     if !verify_captcha(&session, &form.captcha) {
-        render_err!(state, "login.html", ctx, "Invalid CAPTCHA.");
+        render_err!(state, "auth/login.html", ctx, "Invalid CAPTCHA.");
     }
 
     let user = get_user_by_username(&state.pool, form.username.trim())
@@ -158,18 +158,18 @@ pub async fn handle_login(
 
     let user = match user {
         Some(u) => u,
-        None    => render_err!(state, "login.html", ctx, "Invalid username or password."),
+        None    => render_err!(state, "auth/login.html", ctx, "Invalid username or password."),
     };
 
     let parsed = PasswordHash::new(&user.password)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
     if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
-        render_err!(state, "login.html", ctx, "Invalid username or password.");
+        render_err!(state, "auth/login.html", ctx, "Invalid username or password.");
     }
 
     if !user.approved {
-        render_err!(state, "login.html", ctx, "Your account is pending admin approval.");
+        render_err!(state, "auth/login.html", ctx, "Your account is pending admin approval.");
     }
 
     let next: Option<String> = session.get(OAUTH_NEXT_KEY);
@@ -200,32 +200,32 @@ pub async fn handle_register(
     let mut ctx = Context::new();
 
     if !verify_captcha(&session, &form.captcha) {
-        render_err!(state, "register.html", ctx, "Invalid CAPTCHA.");
+        render_err!(state, "auth/register.html", ctx, "Invalid CAPTCHA.");
     }
 
     let username = form.username.trim();
 
     if username.is_empty() {
-        render_err!(state, "register.html", ctx, "Username cannot be empty.");
+        render_err!(state, "auth/register.html", ctx, "Username cannot be empty.");
     }
     if username.len() < 2 || username.len() > 32 {
-        render_err!(state, "register.html", ctx, "Username must be 2-32 characters.");
+        render_err!(state, "auth/register.html", ctx, "Username must be 2-32 characters.");
     }
     if !username.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        render_err!(state, "register.html", ctx, "Username may only contain letters, numbers, and underscores.");
+        render_err!(state, "auth/register.html", ctx, "Username may only contain letters, numbers, and underscores.");
     }
     if form.password.len() < 6 {
-        render_err!(state, "register.html", ctx, "Password must be at least 6 characters.");
+        render_err!(state, "auth/register.html", ctx, "Password must be at least 6 characters.");
     }
     if form.password != form.password_repeat {
-        render_err!(state, "register.html", ctx, "Passwords do not match.");
+        render_err!(state, "auth/register.html", ctx, "Passwords do not match.");
     }
     if get_user_by_username(&state.pool, username)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .is_some()
     {
-        render_err!(state, "register.html", ctx, "That username is already taken.");
+        render_err!(state, "auth/register.html", ctx, "That username is already taken.");
     }
 
     let salt    = SaltString::generate(&mut OsRng);
@@ -244,7 +244,7 @@ pub async fn handle_register(
         "success",
         "Account created! You'll need to wait for an admin to approve you before logging in.",
     );
-    let html = render(&state.tera, "register.html", &mut ctx, Instant::now())
+    let html = render(&state.tera, "auth/register.html", &mut ctx, Instant::now())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     Ok((
@@ -269,14 +269,14 @@ pub async fn handle_reset(
 
     let reset = match reset {
         Some(r) => r,
-        None    => render_err!(state, "reset.html", ctx, "This reset link is invalid or has expired."),
+        None    => render_err!(state, "auth/reset.html", ctx, "This reset link is invalid or has expired."),
     };
 
     if form.password.len() < 6 {
-        render_err!(state, "reset.html", ctx, "Password must be at least 6 characters.");
+        render_err!(state, "auth/reset.html", ctx, "Password must be at least 6 characters.");
     }
     if form.password != form.password_repeat {
-        render_err!(state, "reset.html", ctx, "Passwords do not match.");
+        render_err!(state, "auth/reset.html", ctx, "Passwords do not match.");
     }
 
     let user = get_user_by_id(&state.pool, &reset.user_id)

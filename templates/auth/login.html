@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+	<h1>haii omg haii :3</h1>
+	<h2>Login</h2>
+
+	{% if error %}<p class="error">{{ error }}</p>{% endif %}
+	{% if success %}<p class="success">{{ success }}</p>{% endif %}
+
+	<form action="/auth/login" method="POST">
+		<input type="username" name="username" id="username" placeholder="Username"><br>
+		<input type="password" name="password" id="password" placeholder="Password"><br>
+
+		<img src="/captcha"><br>
+		<input type="text" name="captcha" id="captcha" placeholder="CAPTCHA"><br>
+
+		<input type="checkbox" id="remember" name="remember" value="remember">
+		<label for="remember">Remember me</label><br>
+
+		<input type="submit" name="submit" value="Submit">
+	</form>
+
+	<p>
+		Don't have an account? <a href="/auth/register">Register</a>
+	</p>
+</div>
+{% endblock %}

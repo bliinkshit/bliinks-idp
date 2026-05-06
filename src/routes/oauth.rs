@@ -170,7 +170,7 @@ pub async fn render_authorize(
     ctx.insert("state",        query.state.as_deref().unwrap_or(""));
     ctx.insert("has_profile",  &scopes.contains(scopes::PROFILE));
 
-    render(&state.tera, "authorize.html", &mut ctx, Instant::now())
+    render(&state.tera, "auth/authorize.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
