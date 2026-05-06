@@ -3,36 +3,37 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
-<h1>Settings</h1>
-<p>Logged in as <strong>{{ username }}</strong></p>
+<div class="container">
+    <h1>Settings</h1>
+    <p>Logged in as <strong>{{ username }}</strong></p>
 
-<h2>Avatar</h2>
-{% if success_avatar %}<p>{{ success_avatar }}</p>{% endif %}
-<form action="/settings/avatar" method="POST" enctype="multipart/form-data">
-    <input type="file" name="avatar" accept="image/*" required>
-    <input type="submit" value="Upload">
-</form>
+    <h2>Avatar</h2>
+    {% if success_avatar %}<p>{{ success_avatar }}</p>{% endif %}
+    <form action="/settings/avatar" method="POST" enctype="multipart/form-data">
+        <input type="file" name="avatar" accept="image/*" required>
+        <input type="submit" value="Upload">
+    </form>
 
-<h2>Display Name</h2>
-{% if success_profile %}<p>{{ success_profile }}</p>{% endif %}
-{% if error %}<p>{{ error }}</p>{% endif %}
-<form action="/settings/display-name" method="POST">
-    <input type="text" name="display_name" value="{{ display_name | default(value='') }}" placeholder="Display name" maxlength="64">
-    <input type="submit" value="Save">
-</form>
+    <h2>Display Name</h2>
+    {% if success_profile %}<p>{{ success_profile }}</p>{% endif %}
+    {% if error %}<p>{{ error }}</p>{% endif %}
+    <form action="/settings/display-name" method="POST">
+        <input type="text" name="display_name" value="{{ display_name | default(value='') }}" placeholder="Display name" maxlength="64">
+        <input type="submit" value="Save">
+    </form>
 
-<h2>Name Color</h2>
-{% if success_color %}<p>{{ success_color }}</p>{% endif %}
-<form action="/settings/color" method="POST">
-    <input type="color" name="color" value="{{ color | default(value='#000000') }}">
-    <input type="submit" value="Save">
-</form>
+    <h2>Name Color</h2>
+    {% if success_color %}<p>{{ success_color }}</p>{% endif %}
+    <form action="/settings/color" method="POST">
+        <input type="color" name="color" value="{{ color | default(value='#000000') }}">
+        <input type="submit" value="Save">
+    </form>
 
-<h2>Reset Password</h2>
-{% if reset_url %}<p>Your reset link (valid for 1 hour): <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
-<form action="/settings/reset" method="POST">
-    <input type="password" name="password" placeholder="Current password" required>
-    <input type="submit" value="Send Reset Link">
-</form>
-
+    <h2>Reset Password</h2>
+    {% if reset_url %}<p>Your reset link (valid for 1 hour): <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
+    <form action="/settings/reset" method="POST">
+        <input type="password" name="password" placeholder="Current password" required>
+        <input type="submit" value="Send Reset Link">
+    </form>
+</div>
 {% endblock %}

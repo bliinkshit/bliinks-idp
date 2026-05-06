@@ -3,110 +3,113 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
-<h1>Admin Panel</h1>
+<div class="container">
+    <h1>Admin Panel</h1>
 
-{% if error %}<p>Error: {{ error }}</p>{% endif %}
-{% if success %}<p>{{ success }}</p>{% endif %}
-{% if reset_url %}<p>Reset link: <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
-{% if new_client_id %}
-<p>Client created. Save these now - the secret will not be shown again.</p>
-<p>Client ID: {{ new_client_id }}</p>
-<p>Client Secret: {{ new_client_secret }}</p>
-{% endif %}
+    {% if error %}<p>Error: {{ error }}</p>{% endif %}
+    {% if success %}<p>{{ success }}</p>{% endif %}
+    {% if reset_url %}<p>Reset link: <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
+    {% if new_client_id %}
+    <p>Client created. Save these now - the secret will not be shown again.</p>
+    <p>Client ID: {{ new_client_id }}</p>
+    <p>Client Secret: {{ new_client_secret }}</p>
+    {% endif %}
 
-<h2>Users</h2>
-{% if users %}
-<table border="1" cellpadding="4" cellspacing="0">
-    <tr>
-        <th>Avatar</th>
-        <th>Username</th>
-        <th>ID</th>
-        <th>Admin</th>
-        <th>Approved</th>
-        <th>Created</th>
-        <th>Actions</th>
-    </tr>
-    {% for user in users %}
-    <tr>
-        <td>{% if user.avatar_updated_at %}<img src="/avatars/{{ user.id }}">{% else %}None{% endif %}</td>
-        <td>{{ user.username }}</td>
-        <td>{{ user.id }}</td>
-        <td>{% if user.admin %}Yes{% else %}No{% endif %}</td>
-        <td>{% if user.approved %}Yes{% else %}No{% endif %}</td>
-        <td>{{ user.date_created }}</td>
-        <td>
-            {% if user.approved %}
-            <form action="/admin/approve" method="POST">
-                <input type="hidden" name="user_id" value="{{ user.id }}">
-                <input type="hidden" name="approved" value="0">
-                <input type="submit" value="Disapprove">
-            </form>
-            {% else %}
-            <form action="/admin/approve" method="POST">
-                <input type="hidden" name="user_id" value="{{ user.id }}">
-                <input type="hidden" name="approved" value="1">
-                <input type="submit" value="Approve">
-            </form>
-            {% endif %}
+    <h2>Users</h2>
+    {% if users %}
+    <table border="1" cellpadding="4" cellspacing="0">
+        <tr>
+            <th>Avatar</th>
+            <th>Username</th>
+            <th>ID</th>
+            <th>Admin</th>
+            <th>Approved</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{% if user.avatar_updated_at %}<img width="50px" height="50px" src="/avatars/{{ user.id }}">{% else %}None{% endif %}</td>
+            <td>
+                <span {% if user.color %}style="color:{{user.color}};"{% endif %}>{{ user.username }}</span>
+            </td>
+            <td>{{ user.id }}</td>
+            <td>{% if user.admin %}Yes{% else %}No{% endif %}</td>
+            <td>{% if user.approved %}Yes{% else %}No{% endif %}</td>
+            <td>{{ user.date_created | date(format="%b %d %Y") }}</td>
+            <td>
+                {% if user.approved %}
+                <form action="/admin/approve" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="hidden" name="approved" value="0">
+                    <input type="submit" value="Disapprove">
+                </form>
+                {% else %}
+                <form action="/admin/approve" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="hidden" name="approved" value="1">
+                    <input type="submit" value="Approve">
+                </form>
+                {% endif %}
 
-            {% if user.admin %}
-            <form action="/admin/toggle-admin" method="POST">
-                <input type="hidden" name="user_id" value="{{ user.id }}">
-                <input type="hidden" name="admin" value="0">
-                <input type="submit" value="Revoke Admin">
-            </form>
-            {% else %}
-            <form action="/admin/toggle-admin" method="POST">
-                <input type="hidden" name="user_id" value="{{ user.id }}">
-                <input type="hidden" name="admin" value="1">
-                <input type="submit" value="Make Admin">
-            </form>
-            {% endif %}
+                {% if user.admin %}
+                <form action="/admin/toggle-admin" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="hidden" name="admin" value="0">
+                    <input type="submit" value="Revoke Admin">
+                </form>
+                {% else %}
+                <form action="/admin/toggle-admin" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="hidden" name="admin" value="1">
+                    <input type="submit" value="Make Admin">
+                </form>
+                {% endif %}
 
-            <form action="/admin/reset" method="POST">
-                <input type="hidden" name="user_id" value="{{ user.id }}">
-                <input type="submit" value="Issue Reset Link">
-            </form>
-        </td>
-    </tr>
-    {% endfor %}
-</table>
-{% else %}
-<p>No users found.</p>
-{% endif %}
+                <form action="/admin/reset" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="submit" value="Issue Reset Link">
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No users found.</p>
+    {% endif %}
 
-<h2>OAuth Clients</h2>
-<h3>Register New Client</h3>
-<form action="/admin/clients/create" method="POST">
-    <input type="text"   name="name"         placeholder="App name" required>
-    <input type="text"   name="redirect_uri"  placeholder="Redirect URI" required>
-    <input type="submit" value="Create Client">
-</form>
+    <h2>OAuth Clients</h2>
+    <h3>Register New Client</h3>
+    <form action="/admin/clients/create" method="POST">
+        <input type="text"   name="name"         placeholder="App name" required>
+        <input type="text"   name="redirect_uri"  placeholder="Redirect URI" required>
+        <input type="submit" value="Create Client">
+    </form>
 
-{% if clients %}
-<table border="1" cellpadding="4" cellspacing="0">
-    <tr>
-        <th>Name</th>
-        <th>Client ID</th>
-        <th>Created</th>
-        <th>Actions</th>
-    </tr>
-    {% for client in clients %}
-    <tr>
-        <td>{{ client.name }}</td>
-        <td>{{ client.id }}</td>
-        <td>{{ client.created_at }}</td>
-        <td>
-            <form action="/admin/clients/delete" method="POST">
-                <input type="hidden" name="client_id" value="{{ client.id }}">
-                <input type="submit" value="Delete">
-            </form>
-        </td>
-    </tr>
-    {% endfor %}
-</table>
-{% else %}
-<p>No OAuth clients registered.</p>
-{% endif %}
-
+    {% if clients %}
+    <table border="1" cellpadding="4" cellspacing="0">
+        <tr>
+            <th>Name</th>
+            <th>Client ID</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+        {% for client in clients %}
+        <tr>
+            <td>{{ client.name }}</td>
+            <td>{{ client.id }}</td>
+            <td>{{ client.created_at }}</td>
+            <td>
+                <form action="/admin/clients/delete" method="POST">
+                    <input type="hidden" name="client_id" value="{{ client.id }}">
+                    <input type="submit" value="Delete">
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No OAuth clients registered.</p>
+    {% endif %}
+</div>
 {% endblock %}
