@@ -6,31 +6,79 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
+use governor::middleware::StateInformationMiddleware;
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 
 use crate::{
     db::queries::get_user_by_id,
     error::{AppError, AppErrorResponse},
-    session::Session,
     routes::auth::USER_SESSION_KEY,
+    session::Session,
     AppState,
 };
 
-pub async fn require_auth(
-    session:      Session,
-    req:          Request,
-    next:         Next,
-) -> Response {
+pub fn auth_rate_limiter() -> GovernorLayer<SmartIpKeyExtractor, StateInformationMiddleware> {
+    let config = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(2)
+            .burst_size(5)
+            .key_extractor(SmartIpKeyExtractor)
+            .use_headers()
+            .finish()
+            .unwrap(),
+    );
+    GovernorLayer { config }
+}
+
+pub fn api_rate_limiter() -> GovernorLayer<SmartIpKeyExtractor, StateInformationMiddleware> {
+    let config = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(10)
+            .burst_size(30)
+            .key_extractor(SmartIpKeyExtractor)
+            .use_headers()
+            .finish()
+            .unwrap(),
+    );
+    GovernorLayer { config }
+}
+
+pub async fn security_headers(req: Request, next: Next) -> Response {
+    let mut res = next.run(req).await;
+    let h = res.headers_mut();
+
+    h.insert("X-Content-Type-Options",  "nosniff".parse().unwrap());
+    h.insert("X-Frame-Options",         "DENY".parse().unwrap());
+    h.insert("X-XSS-Protection",        "1; mode=block".parse().unwrap());
+    h.insert("Referrer-Policy",         "strict-origin-when-cross-origin".parse().unwrap());
+    h.insert("Permissions-Policy",      "geolocation=(), microphone=(), camera=()".parse().unwrap());
+    h.insert(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+            .parse()
+            .unwrap(),
+    );
+
+    if !cfg!(debug_assertions) {
+        h.insert(
+            "Strict-Transport-Security",
+            "max-age=63072000; includeSubDomains; preload".parse().unwrap(),
+        );
+    }
+
+    res
+}
+
+pub async fn require_auth(session: Session, req: Request, next: Next) -> Response {
     if session.get::<String>(USER_SESSION_KEY).is_some() {
         return next.run(req).await;
     }
     Redirect::to("/auth/login").into_response()
 }
 
-pub async fn redirect_if_authed(
-    session:      Session,
-    req:          Request,
-    next:         Next,
-) -> Response {
+pub async fn redirect_if_authed(session: Session, req: Request, next: Next) -> Response {
     if session.get::<String>(USER_SESSION_KEY).is_none() {
         return next.run(req).await;
     }
@@ -38,10 +86,10 @@ pub async fn redirect_if_authed(
 }
 
 pub async fn require_admin(
-    session:        Session,
-    State(state):   State<Arc<AppState>>,
-    req:            Request,
-    next:           Next,
+    session: Session,
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
 ) -> Response {
     let user_id = match session.get::<String>(USER_SESSION_KEY) {
         Some(id) => id,

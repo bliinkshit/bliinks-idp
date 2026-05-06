@@ -9,18 +9,20 @@ mod routes;
 mod session;
 
 use axum::{
+    extract::{DefaultBodyLimit, Request},
     middleware as axum_middleware,
-    extract::Request,
     routing::{get, post},
     Router,
 };
-use tower_http::trace::TraceLayer;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tera::Tera;
+use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
+use std::net::SocketAddr;
 
+//internal
 use cfg::CONFIG;
 use db::init_pool;
 use error::AppError;
@@ -65,30 +67,31 @@ async fn main() -> Result<(), AppError> {
     });
 
     let guest_routes = Router::new()
-        .route("/auth/register",  get(routes::auth::render_register))
-        .route("/auth/register",  post(routes::auth::handle_register))
-        .route("/auth/login",     get(routes::auth::render_login))
-        .route("/auth/login",     post(routes::auth::handle_login))
-        .route("/captcha",        get(routes::captcha::render_captcha))
+        .route("/auth/register", get(routes::auth::render_register))
+        .route("/auth/register", post(routes::auth::handle_register))
+        .route("/auth/login",    get(routes::auth::render_login))
+        .route("/auth/login",    post(routes::auth::handle_login))
+        .route("/captcha",       get(routes::captcha::render_captcha))
+        .layer(middleware::auth_rate_limiter())
         .layer(axum_middleware::from_fn(middleware::redirect_if_authed));
 
     let admin_routes = Router::new()
-        .route("/admin",                  get(routes::admin::render_admin))
-        .route("/admin/approve",          post(routes::admin::handle_approve))
-        .route("/admin/toggle-admin",     post(routes::admin::handle_toggle_admin))
-        .route("/admin/reset",            post(routes::admin::handle_issue_reset))
-        .route("/admin/clients/create",   post(routes::admin::handle_create_client))
-        .route("/admin/clients/delete",   post(routes::admin::handle_delete_client))
+        .route("/admin",                get(routes::admin::render_admin))
+        .route("/admin/approve",        post(routes::admin::handle_approve))
+        .route("/admin/toggle-admin",   post(routes::admin::handle_toggle_admin))
+        .route("/admin/reset",          post(routes::admin::handle_issue_reset))
+        .route("/admin/clients/create", post(routes::admin::handle_create_client))
+        .route("/admin/clients/delete", post(routes::admin::handle_delete_client))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::require_admin));
 
     let protected_routes = Router::new()
-        .route("/",                       get(routes::index::render_index))
-        .route("/auth/logout",            get(routes::auth::handle_logout))
-        .route("/settings",               get(routes::settings::render_settings))
-        .route("/settings/display-name",  post(routes::settings::handle_display_name))
-        .route("/settings/color",         post(routes::settings::handle_color))
-        .route("/settings/reset",         post(routes::settings::handle_reset))
-        .route("/settings/avatar",        post(routes::avatar::handle_upload))
+        .route("/",                      get(routes::index::render_index))
+        .route("/auth/logout",           get(routes::auth::handle_logout))
+        .route("/settings",              get(routes::settings::render_settings))
+        .route("/settings/display-name", post(routes::settings::handle_display_name))
+        .route("/settings/color",        post(routes::settings::handle_color))
+        .route("/settings/reset",        post(routes::settings::handle_reset))
+        .route("/settings/avatar",       post(routes::avatar::handle_upload))
         .layer(axum_middleware::from_fn(middleware::require_auth));
 
     let oauth_routes = Router::new()
@@ -96,18 +99,21 @@ async fn main() -> Result<(), AppError> {
         .route("/oauth/authorize",    post(routes::oauth::handle_authorize))
         .route("/oauth/token",        post(routes::oauth::handle_token))
         .route("/oauth/token/revoke", post(routes::oauth::handle_revoke))
-        .route("/oauth/userinfo",     get(routes::oauth::handle_userinfo));
+        .route("/oauth/userinfo",     get(routes::oauth::handle_userinfo))
+        .layer(middleware::api_rate_limiter());
 
     let app = Router::new()
-        .route("/auth",           get(routes::auth::render_redirect))
-        .route("/auth/reset",     get(routes::auth::render_reset))
-        .route("/auth/reset",     post(routes::auth::handle_reset))
+        .route("/auth",             get(routes::auth::render_redirect))
+        .route("/auth/reset",       get(routes::auth::render_reset))
+        .route("/auth/reset",       post(routes::auth::handle_reset))
         .route("/avatars/:user_id", get(routes::avatar::handle_serve))
         .merge(guest_routes)
         .merge(protected_routes)
         .merge(admin_routes)
         .merge(oauth_routes)
         .fallback(routes::serve::static_or_error)
+        .layer(DefaultBodyLimit::max(5 * 1024 * 1024))
+        .layer(axum_middleware::from_fn(middleware::security_headers))
         .layer(axum_middleware::from_fn_with_state(state.clone(), inject_pool))
         .with_state(state);
 
@@ -119,7 +125,7 @@ async fn main() -> Result<(), AppError> {
 
     let listener = tokio::net::TcpListener::bind(CONFIG.server.addr()).await?;
     info!("listening on http://{}", CONFIG.server.addr());
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
 
     Ok(())
 }
