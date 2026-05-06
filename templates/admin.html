@@ -17,7 +17,7 @@
 
     <h2>Users</h2>
     {% if users %}
-    <table border="1" cellpadding="4" cellspacing="0">
+    <table class="table" border="1" cellpadding="4" cellspacing="0">
         <tr>
             <th>Avatar</th>
             <th>Username</th>
@@ -84,10 +84,10 @@
         <input type="text"   name="name"         placeholder="App name" required>
         <input type="text"   name="redirect_uri"  placeholder="Redirect URI" required>
         <input type="submit" value="Create Client">
-    </form>
+    </form><br>
 
     {% if clients %}
-    <table border="1" cellpadding="4" cellspacing="0">
+    <table class="table" border="1" cellpadding="4" cellspacing="0">
         <tr>
             <th>Name</th>
             <th>Client ID</th>

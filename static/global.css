@@ -17,3 +17,21 @@ body {
 	margin: 0 auto;
 	padding: 0 20px;
 }
+
+.nav {
+	list-style: none;
+	padding: 10px 0;
+	margin: 0 0 10px;
+}
+
+.nav li {
+	display: inline;
+}
+
+.footer {
+	padding: 10px 0;
+}
+
+.table {
+	width: 100%;
+}
