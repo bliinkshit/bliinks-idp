@@ -5,7 +5,6 @@ pub mod oauth_queries;
 
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use tracing::{info};
-use tracing_subscriber::{fmt, EnvFilter};
 use sqlx::migrate::Migrate;
 
 //internal
