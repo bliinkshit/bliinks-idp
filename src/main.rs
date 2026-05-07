@@ -86,7 +86,6 @@ async fn main() -> Result<(), AppError> {
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::require_admin));
 
     let protected_routes = Router::new()
-        .route("/",                      get(routes::index::render_index))
         .route("/auth/logout",           get(routes::auth::handle_logout))
         .route("/settings",              get(routes::settings::render_settings))
         .route("/settings/display-name", post(routes::settings::handle_display_name))
@@ -106,6 +105,7 @@ async fn main() -> Result<(), AppError> {
         .layer(middleware::api_rate_limiter());
 
     let app = Router::new()
+        .route("/",                      get(routes::index::render_index))
         .route("/auth",             get(routes::auth::render_redirect))
         .route("/auth/reset",       get(routes::auth::render_reset))
         .route("/auth/reset",       post(routes::auth::handle_reset))

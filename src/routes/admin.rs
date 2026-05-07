@@ -15,9 +15,8 @@ use serde::Deserialize;
 use tera::Context;
 use uuid::Uuid;
 use tokio::fs;
-use crate::routes::avatar::AVATAR_DIR;
-use crate::session::{clear_cookies, Session};
 
+//internal
 use crate::{
     db::{
         oauth_queries::{
@@ -31,6 +30,8 @@ use crate::{
     error::AppErrorResponse,
     render::render,
     AppState,
+    session::{clear_cookies, Session},
+    routes::avatar::AVATAR_DIR,
 };
 
 #[derive(Deserialize)]
