@@ -80,6 +80,7 @@ async fn main() -> Result<(), AppError> {
         .route("/admin/approve",        post(routes::admin::handle_approve))
         .route("/admin/toggle-admin",   post(routes::admin::handle_toggle_admin))
         .route("/admin/reset",          post(routes::admin::handle_issue_reset))
+        .route("/admin/delete", post(routes::admin::handle_force_delete))
         .route("/admin/clients/create", post(routes::admin::handle_create_client))
         .route("/admin/clients/delete", post(routes::admin::handle_delete_client))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::require_admin));
@@ -90,8 +91,10 @@ async fn main() -> Result<(), AppError> {
         .route("/settings",              get(routes::settings::render_settings))
         .route("/settings/display-name", post(routes::settings::handle_display_name))
         .route("/settings/color",        post(routes::settings::handle_color))
-        .route("/settings/reset",        post(routes::settings::handle_reset))
         .route("/settings/avatar",       post(routes::avatar::handle_upload))
+        .route("/security",              get(routes::security::render_security))
+        .route("/security/reset",        post(routes::security::handle_reset))
+        .route("/security/delete",       post(routes::security::handle_delete_account))
         .layer(axum_middleware::from_fn(middleware::require_auth));
 
     let oauth_routes = Router::new()

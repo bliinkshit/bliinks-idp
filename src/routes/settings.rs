@@ -2,7 +2,6 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     extract::{Form, State},
     http::HeaderMap,
@@ -13,7 +12,7 @@ use tera::Context;
 
 use crate::{
     db::queries::{
-        get_user_by_id, issue_password_reset, update_user_color, update_user_display_name,
+        get_user_by_id, update_user_color, update_user_display_name,
     },
     error::{AppError, AppErrorResponse},
     render::render,
@@ -155,43 +154,6 @@ pub async fn handle_color(
 
     ctx.insert("color",         &value);
     ctx.insert("success_color", "Color updated.");
-
-    render(&state.tera, "settings.html", &mut ctx, Instant::now())
-        .map(|html| Html(html).into_response())
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
-}
-
-#[derive(Deserialize)]
-pub struct SettingsResetForm {
-    pub password: String,
-}
-
-pub async fn handle_reset(
-    session:      Session,
-    State(state): State<Arc<AppState>>,
-    headers:      HeaderMap,
-    Form(form):   Form<SettingsResetForm>,
-) -> Result<Response, AppErrorResponse> {
-    let user_id: String = match session.get(USER_SESSION_KEY) {
-        Some(id) => id,
-        None     => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
-    };
-
-    let (mut ctx, user) = settings_ctx(&state, &user_id).await?;
-
-    let parsed = PasswordHash::new(&user.password)
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
-
-    if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
-        render_err!(state, ctx, "Incorrect password.");
-    }
-
-    let base_url  = base_url_from_headers(&headers);
-    let reset_url = issue_password_reset(&state.pool, &user_id, &base_url)
-        .await
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
-
-    ctx.insert("reset_url", &reset_url);
 
     render(&state.tera, "settings.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Security</h1>
+
+    <h2>Reset Password</h2>
+    {% if reset_url %}<p>Your reset link (valid for 1 hour): <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
+    <form action="/security/reset" method="POST">
+        <input type="password" name="password" placeholder="Current password" required autocomplete="current-password">
+        <input type="submit" value="Send Reset Link">
+    </form>
+
+    <h2>Delete Account</h2>
+    <p>This will permanently delete your account. Your username will be released and your data removed. This cannot be undone.</p>
+    {% if error %}<p>{{ error }}</p>{% endif %}
+    <form action="/security/delete" method="POST">
+        <input type="password" name="password" placeholder="Current password" required autocomplete="current-password">
+        <input type="submit" value="Delete Account">
+    </form>
+</div>
+{% endblock %}

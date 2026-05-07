@@ -9,20 +9,23 @@ use argon2::{
 use axum::{
     extract::{Form, State},
     http::HeaderMap,
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse, Response, Redirect},
 };
 use serde::Deserialize;
 use tera::Context;
 use uuid::Uuid;
+use tokio::fs;
+use crate::routes::avatar::AVATAR_DIR;
+use crate::session::{clear_cookies, Session};
 
 use crate::{
     db::{
         oauth_queries::{
-            add_redirect_uri, create_client, delete_client, get_all_clients,
+            add_redirect_uri, create_client, delete_client, get_all_clients, revoke_all_tokens_for_user,
         },
         queries::{
             delete_sessions_for_user, get_all_users, issue_password_reset, set_user_admin,
-            set_user_approved,
+            set_user_approved, delete_user,
         },
     },
     error::AppErrorResponse,
@@ -198,6 +201,53 @@ pub async fn handle_delete_client(
     let mut ctx = build_ctx(&state).await?;
     ctx.insert("success", "OAuth client deleted.");
 
+    render(&state.tera, "admin.html", &mut ctx, Instant::now())
+        .map(|html| Html(html).into_response())
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
+}
+
+#[derive(Deserialize)]
+pub struct ForceDeleteForm {
+    pub user_id: String,
+}
+
+pub async fn handle_force_delete(
+    session:      Session,
+    State(state): State<Arc<AppState>>,
+    Form(form):   Form<ForceDeleteForm>,
+) -> Result<Response, AppErrorResponse> {
+    let secure = !crate::cfg::CONFIG.general.dev;
+ 
+    delete_user(&state.pool, &form.user_id)
+        .await
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+ 
+    delete_sessions_for_user(&state.pool, &form.user_id)
+        .await
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+ 
+    revoke_all_tokens_for_user(&state.pool, &form.user_id)
+        .await
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+ 
+    let _ = fs::remove_file(format!("{}/{}.gif", AVATAR_DIR, form.user_id)).await;
+ 
+    let self_delete = session
+        .get::<String>(crate::routes::auth::USER_SESSION_KEY)
+        .map(|id| id == form.user_id)
+        .unwrap_or(false);
+ 
+    if self_delete {
+        session.destroy().await;
+        return Ok((
+            clear_cookies(secure),
+            Redirect::to("/auth/login"),
+        ).into_response());
+    }
+ 
+    let mut ctx = build_ctx(&state).await?;
+    ctx.insert("success", "User deleted.");
+ 
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))

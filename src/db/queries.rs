@@ -32,7 +32,7 @@ pub async fn get_user_by_username(
     username: &str,
 ) -> Result<Option<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created
+        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created, deleted_at
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -46,7 +46,7 @@ pub async fn get_user_by_id(
     id:   &str,
 ) -> Result<Option<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created
+        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created, deleted_at
          FROM users WHERE id = ?",
     )
     .bind(id)
@@ -153,7 +153,7 @@ pub async fn delete_expired_password_resets(pool: &SqlitePool) {
 }
 pub async fn get_all_users(pool: &SqlitePool) -> Result<Vec<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created
+        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created, deleted_at
          FROM users ORDER BY date_created ASC",
     )
     .fetch_all(pool)
@@ -228,5 +228,34 @@ pub async fn set_avatar_updated_at(
         .execute(pool)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(())
+}
+
+pub async fn delete_user(
+    pool:    &SqlitePool,
+    user_id: &str,
+) -> Result<(), AppError> {
+    let deleted_username = format!("deleted_{}", &user_id[..12]);
+    let now              = Utc::now().to_rfc3339();
+
+    sqlx::query(
+        "UPDATE users
+         SET deleted_at        = ?,
+             username          = ?,
+             password          = '',
+             approved          = 0,
+             admin             = 0,
+             display_name      = NULL,
+             color             = NULL,
+             avatar_updated_at = NULL
+         WHERE id = ?",
+    )
+    .bind(&now)
+    .bind(&deleted_username)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
     Ok(())
 }

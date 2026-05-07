@@ -38,6 +38,7 @@
             <td>{% if user.approved %}Yes{% else %}No{% endif %}</td>
             <td>{{ user.date_created | date(format="%b %d %Y") }}</td>
             <td>
+                {% if not user.deleted_at %}
                 {% if user.approved %}
                 <form action="/admin/approve" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
@@ -70,6 +71,14 @@
                     <input type="hidden" name="user_id" value="{{ user.id }}">
                     <input type="submit" value="Issue Reset Link">
                 </form>
+
+                <form action="/admin/delete" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="submit" value="Force Delete" disabled>
+                </form>
+                {% else %}
+                <em>Deleted</em>
+                {% endif %}
             </td>
         </tr>
         {% endfor %}
@@ -112,4 +121,6 @@
     <p>No OAuth clients registered.</p>
     {% endif %}
 </div>
+
+<script src="/admin.js"></script>
 {% endblock %}

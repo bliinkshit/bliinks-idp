@@ -434,6 +434,13 @@ pub async fn handle_userinfo(
         }))).into_response(),
     };
 
+    if user.is_deleted() {
+        return (StatusCode::GONE, Json(serde_json::json!({
+            "error":             "user_deleted",
+            "error_description": "This account has been deleted.",
+        }))).into_response();
+    }
+
     let has_profile = scopes::contains(&stored.scopes, scopes::PROFILE);
 
     let picture = if has_profile && user.avatar_updated_at.is_some() {

@@ -168,6 +168,10 @@ pub async fn handle_login(
         render_err!(state, "auth/login.html", ctx, "Invalid username or password.");
     }
 
+    if user.is_deleted() {
+        render_err!(state, "auth/login.html", ctx, "Invalid username or password.");
+    }
+
     if !user.approved {
         render_err!(state, "auth/login.html", ctx, "Your account is pending admin approval.");
     }

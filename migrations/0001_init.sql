@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
     color             TEXT,
     display_name      TEXT,
     avatar_updated_at TEXT,
-    date_created      TEXT NOT NULL
+    date_created      TEXT NOT NULL,
+    deleted_at        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (

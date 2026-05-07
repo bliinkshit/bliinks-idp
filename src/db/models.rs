@@ -13,6 +13,7 @@ pub struct User {
     pub color:             Option<String>,
     pub avatar_updated_at: Option<String>,
     pub date_created:      String,
+    pub deleted_at:        Option<String>,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -53,3 +54,8 @@ pub struct OAuthToken {
     pub created_at: String,
 }
 
+impl User {
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_at.is_some()
+    }
+}
