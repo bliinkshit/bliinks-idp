@@ -21,10 +21,16 @@ pub fn render(
     let phrase = GEN_PHRASES
         .choose(&mut rand::thread_rng())
         .unwrap_or(&"generated");
+    let page = template
+        .rsplit('/')
+        .next()
+        .unwrap_or(template)
+        .trim_end_matches(".html");
 
     ctx.insert("title", &CONFIG.general.title);
     ctx.insert("gen_phrase", phrase);
     ctx.insert("gen_time_secs", &format!("{:.4}", elapsed));
+    ctx.insert("page", page);
 
     Ok(tera.render(template, ctx)?)
 }
