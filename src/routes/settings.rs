@@ -39,11 +39,13 @@ async fn settings_ctx(
 
     let mut ctx = Context::new();
     ctx.insert("title",        "Settings");
+    ctx.insert("id",           &user.id);
+    ctx.insert("avatar",       &user.avatar_updated_at.is_some());
     ctx.insert("username",     &user.username);
     ctx.insert("display_name", &user.display_name);
     ctx.insert("color",        &user.color);
     insert_user_ctx(&mut ctx, &user);
-    
+
     Ok((ctx, user))
 }
 
