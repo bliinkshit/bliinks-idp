@@ -76,10 +76,18 @@ pub async fn handle_reset(
     ctx.insert("auth_display_name", &user.display_name);
     ctx.insert("auth_color",        &user.color);
 
-    let parsed = PasswordHash::new(&user.password)
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
+    let password = form.password.clone();
+    let password_hash = user.password.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        PasswordHash::new(&password_hash)
+            .ok()
+            .and_then(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).ok())
+            .is_some()
+    })
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
-    if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
+    if !verified {
         render_err!(state, "security.html", ctx, "Incorrect password.", start);
     }
 
@@ -127,10 +135,18 @@ pub async fn handle_delete_account(
     ctx.insert("auth_display_name", &user.display_name);
     ctx.insert("auth_color",        &user.color);
 
-    let parsed = PasswordHash::new(&user.password)
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
+    let password = form.password.clone();
+    let password_hash = user.password.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        PasswordHash::new(&password_hash)
+            .ok()
+            .and_then(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).ok())
+            .is_some()
+    })
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
-    if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
+    if !verified {
         render_err!(state, "security.html", ctx, "Incorrect password.", start);
     }
 

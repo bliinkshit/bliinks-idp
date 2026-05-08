@@ -158,10 +158,18 @@ pub async fn handle_login(
         None    => render_err!(state, "auth/login.html", ctx, "Invalid username or password.", start),
     };
 
-    let parsed = PasswordHash::new(&user.password)
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
+    let password = form.password.clone();
+    let password_hash = user.password.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        PasswordHash::new(&password_hash)
+            .ok()
+            .and_then(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).ok())
+            .is_some()
+    })
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
-    if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
+    if !verified {
         render_err!(state, "auth/login.html", ctx, "Invalid username or password.", start);
     }
 
@@ -227,11 +235,16 @@ pub async fn handle_register(
         render_err!(state, "auth/register.html", ctx, "That username is already taken.", start);
     }
 
-    let salt    = SaltString::generate(&mut OsRng);
-    let hash    = Argon2::default()
-        .hash_password(form.password.as_bytes(), &salt)
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
-        .to_string();
+    let password = form.password.clone();
+    let hash = tokio::task::spawn_blocking(move || {
+        let salt = SaltString::generate(&mut OsRng);
+        Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .map(|h| h.to_string())
+    })
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
     let id      = Uuid::new_v4().to_string();
     let created = chrono::Utc::now().to_rfc3339();
 
@@ -283,11 +296,16 @@ pub async fn handle_reset(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("User not found".into())))?;
 
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = Argon2::default()
-        .hash_password(form.password.as_bytes(), &salt)
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
-        .to_string();
+    let password = form.password.clone();
+    let hash = tokio::task::spawn_blocking(move || {
+        let salt = SaltString::generate(&mut OsRng);
+        Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .map(|h| h.to_string())
+    })
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
     mark_password_reset_used(&state.pool, &token_hash)
         .await
