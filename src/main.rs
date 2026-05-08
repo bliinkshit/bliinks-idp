@@ -7,6 +7,7 @@ mod oauth;
 mod render;
 mod routes;
 mod session;
+mod helpers;
 
 use axum::{
     extract::{DefaultBodyLimit, Request},
