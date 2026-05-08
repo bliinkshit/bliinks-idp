@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 use tera::Context;
 use uuid::Uuid;
 
+//internal
 use crate::{
     db::queries::{
         create_user, delete_sessions_for_user, get_password_reset,
@@ -27,6 +28,8 @@ use crate::{
     routes::captcha::CAPTCHA_SESSION_KEY,
     session::{clear_cookies, Session},
     AppState,
+    render_err,
+    helpers::{validate_password, get_user_ctx},
 };
 
 pub const USER_SESSION_KEY:  &str = "user_id";
@@ -78,16 +81,6 @@ fn verify_captcha(session: &Session, input: &str) -> bool {
     hash_input(&input.trim().to_uppercase()) == expected
 }
 
-macro_rules! render_err {
-    ($state:expr, $template:expr, $ctx:expr, $msg:expr) => {{
-        $ctx.insert("error", $msg);
-        let html = render(&$state.tera, $template, &mut $ctx, Instant::now())
-            .map_err(|e| AppErrorResponse(Arc::clone(&$state), e))?;
-        return Ok(Html(html).into_response());
-    }};
-}
-
-
 pub async fn render_redirect() -> Redirect {
     Redirect::to("/auth/login")
 }
@@ -96,11 +89,12 @@ pub async fn render_login(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LoginQuery>,
 ) -> Result<Html<String>, AppErrorResponse> {
+    let start = Instant::now();
     let mut ctx = Context::new();
     if query.reset.as_deref() == Some("1") {
         ctx.insert("success", "Password reset! You can now log in with your new password.");
     }
-    render(&state.tera, "auth/login.html", &mut ctx, Instant::now())
+    render(&state.tera, "auth/login.html", &mut ctx, start)
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -108,7 +102,8 @@ pub async fn render_login(
 pub async fn render_register(
     State(state): State<Arc<AppState>>,
 ) -> Result<Html<String>, AppErrorResponse> {
-    render(&state.tera, "auth/register.html", &mut Context::new(), Instant::now())
+    let start = Instant::now();
+    render(&state.tera, "auth/register.html", &mut Context::new(), start)
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -117,6 +112,7 @@ pub async fn render_reset(
     State(state): State<Arc<AppState>>,
     Query(query): Query<TokenQuery>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
     let Some(token) = query.token else {
         return Ok(Redirect::to("/auth/login").into_response());
     };
@@ -134,7 +130,7 @@ pub async fn render_reset(
         ctx.insert("error", "This reset link is invalid or has expired.");
     }
 
-    render(&state.tera, "auth/reset.html", &mut ctx, Instant::now())
+    render(&state.tera, "auth/reset.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -144,12 +140,13 @@ pub async fn handle_login(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<LoginForm>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
     let secure   = !crate::cfg::CONFIG.general.dev;
     let remember = form.remember.as_deref() == Some("remember");
     let mut ctx  = Context::new();
 
     if !verify_captcha(&session, &form.captcha) {
-        render_err!(state, "auth/login.html", ctx, "Invalid CAPTCHA.");
+        render_err!(state, "auth/login.html", ctx, "Invalid CAPTCHA.", start);
     }
 
     let user = get_user_by_username(&state.pool, form.username.trim())
@@ -158,22 +155,22 @@ pub async fn handle_login(
 
     let user = match user {
         Some(u) => u,
-        None    => render_err!(state, "auth/login.html", ctx, "Invalid username or password."),
+        None    => render_err!(state, "auth/login.html", ctx, "Invalid username or password.", start),
     };
 
     let parsed = PasswordHash::new(&user.password)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
     if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
-        render_err!(state, "auth/login.html", ctx, "Invalid username or password.");
+        render_err!(state, "auth/login.html", ctx, "Invalid username or password.", start);
     }
 
     if user.is_deleted() {
-        render_err!(state, "auth/login.html", ctx, "Invalid username or password.");
+        render_err!(state, "auth/login.html", ctx, "Invalid username or password.", start);
     }
 
     if !user.approved {
-        render_err!(state, "auth/login.html", ctx, "Your account is pending admin approval.");
+        render_err!(state, "auth/login.html", ctx, "Your account is pending admin approval.", start);
     }
 
     let next: Option<String> = session.get(OAUTH_NEXT_KEY);
@@ -200,36 +197,34 @@ pub async fn handle_register(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<RegisterForm>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
     let secure  = !crate::cfg::CONFIG.general.dev;
     let mut ctx = Context::new();
 
     if !verify_captcha(&session, &form.captcha) {
-        render_err!(state, "auth/register.html", ctx, "Invalid CAPTCHA.");
+        render_err!(state, "auth/register.html", ctx, "Invalid CAPTCHA.", start);
     }
 
     let username = form.username.trim();
 
     if username.is_empty() {
-        render_err!(state, "auth/register.html", ctx, "Username cannot be empty.");
+        render_err!(state, "auth/register.html", ctx, "Username cannot be empty.", start);
     }
     if username.len() < 2 || username.len() > 32 {
-        render_err!(state, "auth/register.html", ctx, "Username must be 2-32 characters.");
+        render_err!(state, "auth/register.html", ctx, "Username must be 2-32 characters.", start);
     }
     if !username.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        render_err!(state, "auth/register.html", ctx, "Username may only contain letters, numbers, and underscores.");
+        render_err!(state, "auth/register.html", ctx, "Username may only contain letters, numbers, and underscores.", start);
     }
-    if form.password.len() < 6 {
-        render_err!(state, "auth/register.html", ctx, "Password must be at least 6 characters.");
-    }
-    if form.password != form.password_repeat {
-        render_err!(state, "auth/register.html", ctx, "Passwords do not match.");
+    if let Err(msg) = validate_password(&form.password, &form.password_repeat) {
+        render_err!(state, "auth/register.html", ctx, msg, start);
     }
     if get_user_by_username(&state.pool, username)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .is_some()
     {
-        render_err!(state, "auth/register.html", ctx, "That username is already taken.");
+        render_err!(state, "auth/register.html", ctx, "That username is already taken.", start);
     }
 
     let salt    = SaltString::generate(&mut OsRng);
@@ -248,7 +243,7 @@ pub async fn handle_register(
         "success",
         "Account created! You'll need to wait for an admin to approve you before logging in.",
     );
-    let html = render(&state.tera, "auth/register.html", &mut ctx, Instant::now())
+    let html = render(&state.tera, "auth/register.html", &mut ctx, start)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     Ok((
@@ -262,10 +257,13 @@ pub async fn handle_reset(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<ResetForm>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
     let secure     = !crate::cfg::CONFIG.general.dev;
     let token_hash = hash_input(&form.token);
     let mut ctx    = Context::new();
     ctx.insert("token", &form.token);
+
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
 
     let reset = get_password_reset(&state.pool, &token_hash)
         .await
@@ -273,14 +271,11 @@ pub async fn handle_reset(
 
     let reset = match reset {
         Some(r) => r,
-        None    => render_err!(state, "auth/reset.html", ctx, "This reset link is invalid or has expired."),
+        None    => render_err!(state, "auth/reset.html", ctx, "This reset link is invalid or has expired.", start),
     };
 
-    if form.password.len() < 6 {
-        render_err!(state, "auth/reset.html", ctx, "Password must be at least 6 characters.");
-    }
-    if form.password != form.password_repeat {
-        render_err!(state, "auth/reset.html", ctx, "Passwords do not match.");
+    if let Err(msg) = validate_password(&form.password, &form.password_repeat) {
+        render_err!(state, "auth/reset.html", ctx, msg, start);
     }
 
     let user = get_user_by_id(&state.pool, &reset.user_id)

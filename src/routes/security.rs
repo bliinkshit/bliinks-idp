@@ -18,48 +18,29 @@ use crate::{
         queries::{delete_sessions_for_user, delete_user, get_user_by_id, issue_password_reset},
     },
     error::{AppError, AppErrorResponse},
+    helpers::{get_user_ctx, base_url_from_headers},
     render::render,
     routes::{auth::USER_SESSION_KEY, avatar::AVATAR_DIR},
     session::{clear_cookies, Session},
     AppState,
+    render_err,
 };
-
-fn base_url_from_headers(headers: &HeaderMap) -> String {
-    let host = headers
-        .get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost");
-    let scheme = headers
-        .get("x-forwarded-proto")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("http");
-    format!("{}://{}", scheme, host)
-}
-
-fn base_ctx() -> Context {
-    let mut ctx = Context::new();
-    ctx.insert("title", "Security");
-    ctx
-}
-
-macro_rules! render_err {
-    ($state:expr, $ctx:expr, $msg:expr) => {{
-        $ctx.insert("error", $msg);
-        let html = render(&$state.tera, "security.html", &mut $ctx, Instant::now())
-            .map_err(|e| AppErrorResponse(Arc::clone(&$state), e))?;
-        return Ok(Html(html).into_response());
-    }};
-}
 
 pub async fn render_security(
     session:      Session,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
+
     if session.get::<String>(USER_SESSION_KEY).is_none() {
         return Ok(Redirect::to("/auth/login").into_response());
     }
 
-    render(&state.tera, "security.html", &mut base_ctx(), Instant::now())
+    let mut ctx = Context::new();
+    ctx.insert("title", "Security");
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
+
+    render(&state.tera, "security.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -75,23 +56,31 @@ pub async fn handle_reset(
     headers:      HeaderMap,
     Form(form):   Form<ResetForm>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
+
     let user_id: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(Redirect::to("/auth/login").into_response()),
     };
 
-    let mut ctx = base_ctx();
+    let mut ctx = Context::new();
+    ctx.insert("title", "Security");
 
     let user = get_user_by_id(&state.pool, &user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("User not found".into())))?;
 
+    ctx.insert("auth_username",     &user.username);
+    ctx.insert("auth_is_admin",     &user.admin);
+    ctx.insert("auth_display_name", &user.display_name);
+    ctx.insert("auth_color",        &user.color);
+
     let parsed = PasswordHash::new(&user.password)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
     if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
-        render_err!(state, ctx, "Incorrect password.");
+        render_err!(state, "security.html", ctx, "Incorrect password.", start);
     }
 
     let base_url  = base_url_from_headers(&headers);
@@ -101,7 +90,7 @@ pub async fn handle_reset(
 
     ctx.insert("reset_url", &reset_url);
 
-    render(&state.tera, "security.html", &mut ctx, Instant::now())
+    render(&state.tera, "security.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
@@ -116,6 +105,8 @@ pub async fn handle_delete_account(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<DeleteAccountForm>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
+
     let secure = !crate::cfg::CONFIG.general.dev;
 
     let user_id: String = match session.get(USER_SESSION_KEY) {
@@ -123,18 +114,24 @@ pub async fn handle_delete_account(
         None     => return Ok(Redirect::to("/auth/login").into_response()),
     };
 
-    let mut ctx = base_ctx();
+    let mut ctx = Context::new();
+    ctx.insert("title", "Security");
 
     let user = get_user_by_id(&state.pool, &user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("User not found".into())))?;
 
+    ctx.insert("auth_username",     &user.username);
+    ctx.insert("auth_is_admin",     &user.admin);
+    ctx.insert("auth_display_name", &user.display_name);
+    ctx.insert("auth_color",        &user.color);
+
     let parsed = PasswordHash::new(&user.password)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
     if Argon2::default().verify_password(form.password.as_bytes(), &parsed).is_err() {
-        render_err!(state, ctx, "Incorrect password.");
+        render_err!(state, "security.html", ctx, "Incorrect password.", start);
     }
 
     delete_user(&state.pool, &user_id)

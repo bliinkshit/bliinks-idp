@@ -1,11 +1,18 @@
 <div class="container">
     <ul class="nav">
         <li><a href="/">Home</a></li>
-        <li><a href="/settings">Settings</a></li>
-        <li><a href="/security">Security</a></li>
-        <li><a href="/admin">Admin</a></li>
-        <li><a href="/auth/login">Login</a></li>
-        <li><a href="/auth/register">Register</a></li>
-        <li><a href="/auth/logout">Logout</a></li>
+
+        {% if auth_is_admin %}
+            <li><a href="/admin">Admin</a></li>
+        {% endif %}
+
+        {% if auth_username %}
+            <li><a href="/settings">Settings</a></li>
+            <li><a href="/security">Security</a></li>
+            <li><a href="/auth/logout">Logout</a></li>
+        {% else %}
+            <li><a href="/auth/login">Login</a></li>
+            <li><a href="/auth/register">Register</a></li>
+        {% endif %}
     </ul>
 </div>

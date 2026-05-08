@@ -32,6 +32,7 @@ use crate::{
     AppState,
     session::{clear_cookies, Session},
     routes::avatar::AVATAR_DIR,
+    helpers::get_user_ctx,
 };
 
 #[derive(Deserialize)]
@@ -92,11 +93,15 @@ async fn build_ctx(state: &Arc<AppState>) -> Result<Context, AppErrorResponse> {
 }
 
 pub async fn render_admin(
+    session:      Session,
     State(state): State<Arc<AppState>>,
 ) -> Result<Html<String>, AppErrorResponse> {
+    let start = Instant::now();
     let mut ctx = build_ctx(&state).await?;
 
-    render(&state.tera, "admin.html", &mut ctx, Instant::now())
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
+
+    render(&state.tera, "admin.html", &mut ctx, start)
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }

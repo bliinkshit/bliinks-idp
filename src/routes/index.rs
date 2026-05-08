@@ -12,13 +12,18 @@ use crate::{
     error::AppErrorResponse,
     render::render,
     AppState,
+    session::Session,
+    helpers::get_user_ctx,
 };
 
 pub async fn render_index(
+    session:      Session,
     State(state): State<Arc<AppState>>,
 ) -> Result<Html<String>, AppErrorResponse> {
     let start = Instant::now();
     let mut ctx = Context::new();
+
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
 
     render(&state.tera, "index.html", &mut ctx, start)
         .map(Html)
