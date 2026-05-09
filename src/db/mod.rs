@@ -19,6 +19,14 @@ pub async fn init_pool(url: &str) -> Result<SqlitePool, AppError> {
         .foreign_keys(true)
         .create_if_missing(true);
 
+    if let Some(path) = opts.get_filename().parent() {
+        if !path.as_os_str().is_empty() {
+            tokio::fs::create_dir_all(path)
+                .await
+                .map_err(|e| AppError::Internal(format!("failed to create db directory: {e}")))?;
+        }
+    }
+
     let pool = SqlitePoolOptions::new()
         .max_connections(10)
         .idle_timeout(std::time::Duration::from_secs(600))
