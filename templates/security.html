@@ -6,6 +6,29 @@
 <div class="container">
     <h1>Security</h1>
 
+    <h2>Connected Apps</h2>
+    {% if connected_clients %}
+    <table class="table" border="1" cellpadding="4" cellspacing="0">
+        <tr>
+            <th>App Name</th>
+            <th>Actions</th>
+        </tr>
+        {% for client in connected_clients %}
+        <tr>
+            <td>{{ client.name }}</td>
+            <td>
+                <form action="/security/revoke-client" method="POST">
+                    <input type="hidden" name="client_id" value="{{ client.id }}">
+                    <input type="submit" value="Revoke Access">
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No connected apps.</p>
+    {% endif %}
+
     <h2>Reset Password</h2>
     {% if reset_url %}<p>Your reset link (valid for 1 hour): <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
     <form action="/security/reset" method="POST">

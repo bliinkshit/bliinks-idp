@@ -14,7 +14,7 @@ use tokio::fs;
 
 use crate::{
     db::{
-        oauth_queries::revoke_all_tokens_for_user,
+        oauth_queries::{get_connected_clients_for_user, revoke_all_tokens_for_user, revoke_tokens_for_user_and_client},
         queries::{delete_sessions_for_user, delete_user, get_user_by_id, issue_password_reset},
     },
     error::{AppError, AppErrorResponse},
@@ -39,6 +39,12 @@ pub async fn render_security(
     let mut ctx = Context::new();
     ctx.insert("title", "Security");
     get_user_ctx(&state.pool, &session, &mut ctx).await;
+
+    let user_id: String = session.get(USER_SESSION_KEY).unwrap_or_default();
+    let clients = get_connected_clients_for_user(&state.pool, &user_id)
+        .await
+        .unwrap_or_default();
+    ctx.insert("connected_clients", &clients);
 
     render(&state.tera, "security.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
@@ -170,4 +176,26 @@ pub async fn handle_delete_account(
         clear_cookies(secure),
         Redirect::to("/auth/login"),
     ).into_response())
+}
+
+#[derive(Deserialize)]
+pub struct RevokeClientForm {
+    pub client_id: String,
+}
+
+pub async fn handle_revoke_client(
+    session:      Session,
+    State(state): State<Arc<AppState>>,
+    Form(form):   Form<RevokeClientForm>,
+) -> Result<Response, AppErrorResponse> {
+    let user_id: String = match session.get(USER_SESSION_KEY) {
+        Some(id) => id,
+        None     => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    revoke_tokens_for_user_and_client(&state.pool, &user_id, &form.client_id)
+        .await
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+    Ok(Redirect::to("/security").into_response())
 }

@@ -252,3 +252,21 @@ pub async fn delete_expired_oauth(pool: &SqlitePool) {
         .execute(pool)
         .await;
 }
+
+pub async fn get_connected_clients_for_user(
+    pool:    &SqlitePool,
+    user_id: &str,
+) -> Result<Vec<OAuthClient>, AppError> {
+    sqlx::query_as::<_, OAuthClient>(
+        "SELECT DISTINCT c.id, c.secret_hash, c.name, c.created_at
+         FROM oauth_clients c
+         INNER JOIN oauth_tokens t ON t.client_id = c.id
+         WHERE t.user_id = ? AND t.expires_at > ?
+         ORDER BY c.name ASC",
+    )
+    .bind(user_id)
+    .bind(chrono::Utc::now().to_rfc3339())
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))
+}
