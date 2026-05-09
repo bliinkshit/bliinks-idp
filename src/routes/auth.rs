@@ -32,8 +32,8 @@ use crate::{
     helpers::{validate_password, get_user_ctx},
 };
 
-pub const USER_SESSION_KEY:  &str = "user_id";
-pub const OAUTH_NEXT_KEY:    &str = "oauth_next";
+pub const USER_SESSION_KEY: &str = "user_id";
+pub const OAUTH_NEXT_KEY:   &str = "oauth_next";
 
 #[derive(Deserialize)]
 pub struct LoginForm {
@@ -158,7 +158,7 @@ pub async fn handle_login(
         None    => render_err!(state, "auth/login.html", ctx, "Invalid username or password.", start),
     };
 
-    let password = form.password.clone();
+    let password      = form.password.clone();
     let password_hash = user.password.clone();
     let verified = tokio::task::spawn_blocking(move || {
         PasswordHash::new(&password_hash)
@@ -185,10 +185,9 @@ pub async fn handle_login(
 
     session.remember = remember;
     session.user_id  = Some(user.id.clone());
-    session.regenerate().await;
     session.insert(USER_SESSION_KEY, &user.id);
     session.remove(OAUTH_NEXT_KEY);
-    session.save().await;
+    session.regenerate().await;
 
     let dest         = next.as_deref().unwrap_or("/");
     let mut response = Redirect::to(dest).into_response();
@@ -245,6 +244,7 @@ pub async fn handle_register(
     .await
     .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
     .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
+
     let id      = Uuid::new_v4().to_string();
     let created = chrono::Utc::now().to_rfc3339();
 

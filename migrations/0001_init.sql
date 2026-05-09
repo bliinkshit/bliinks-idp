@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
-    id         TEXT PRIMARY KEY NOT NULL,
-    data       TEXT NOT NULL DEFAULT '{}',
-    expires_at TEXT NOT NULL,
+    id         TEXT    PRIMARY KEY NOT NULL,
+    data       TEXT    NOT NULL DEFAULT '{}',
+    expires_at INTEGER NOT NULL,
     user_id    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);

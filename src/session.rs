@@ -4,7 +4,6 @@ use axum::{
     http::{header, request::Parts, HeaderMap, HeaderValue},
     response::{AppendHeaders, IntoResponse, Response},
 };
-use chrono::Utc;
 use serde_json::Value;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -12,8 +11,16 @@ use uuid::Uuid;
 
 pub const COOKIE_NAME: &str = "sid";
 const REMEMBER_COOKIE_NAME: &str = "remember";
-const SESSION_TTL_HOURS: i64 = 2;
-const REMEMBER_TTL_DAYS: i64 = 30;
+const SESSION_TTL_SECS:    i64 = 2  * 3600;
+const REMEMBER_TTL_SECS:   i64 = 30 * 24 * 3600;
+const REMEMBER_REFRESH_THRESHOLD: f64 = 0.8;
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+}
 
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -23,6 +30,7 @@ pub struct Session {
     pub user_id:  Option<String>,
     pool:         SqlitePool,
     is_new:       bool,
+    dirty:        bool,
 }
 
 impl Session {
@@ -32,30 +40,36 @@ impl Session {
         remember: bool,
     ) -> Self {
         if let Some(id) = sid {
-            let ttl_hours = if remember { REMEMBER_TTL_DAYS * 24 } else { SESSION_TTL_HOURS };
-
-            if let Ok(Some(row)) = sqlx::query_as::<_, (String, String, Option<String>)>(
-                "SELECT id, data, user_id FROM sessions WHERE id = ? AND expires_at > ?",
+            if let Ok(Some(row)) = sqlx::query_as::<_, (String, String, Option<String>, i64)>(
+                "SELECT id, data, user_id, expires_at FROM sessions WHERE id = ? AND expires_at > ?",
             )
             .bind(id)
-            .bind(Utc::now().to_rfc3339())
+            .bind(now_unix())
             .fetch_optional(pool)
             .await
             {
                 let data = serde_json::from_str::<HashMap<String, Value>>(&row.1)
                     .unwrap_or_default();
 
-                let session = Self {
+                let mut session = Self {
                     id:      row.0,
                     data,
                     remember,
                     user_id: row.2,
                     pool:    pool.clone(),
                     is_new:  false,
+                    dirty:   false,
                 };
 
                 if remember {
-                    session.save_with_ttl(ttl_hours).await;
+                    let expires_at  = row.3;
+                    let now         = now_unix();
+                    let threshold   = (REMEMBER_TTL_SECS as f64 * REMEMBER_REFRESH_THRESHOLD) as i64;
+                    let remaining   = expires_at - now;
+                    if remaining < REMEMBER_TTL_SECS - threshold {
+                        session.dirty = true;
+                        session.save().await;
+                    }
                 }
 
                 return session;
@@ -69,6 +83,7 @@ impl Session {
             user_id: None,
             pool:    pool.clone(),
             is_new:  true,
+            dirty:   false,
         }
     }
 
@@ -78,20 +93,26 @@ impl Session {
 
     pub fn insert<T: serde::Serialize>(&mut self, key: &str, value: T) {
         self.data.insert(key.to_string(), serde_json::to_value(value).unwrap());
+        self.dirty = true;
     }
 
     pub fn remove(&mut self, key: &str) {
-        self.data.remove(key);
+        if self.data.remove(key).is_some() {
+            self.dirty = true;
+        }
     }
 
     pub async fn save(&self) {
-        let ttl = if self.remember { REMEMBER_TTL_DAYS * 24 } else { SESSION_TTL_HOURS };
+        if !self.dirty && !self.is_new {
+            return;
+        }
+        let ttl = if self.remember { REMEMBER_TTL_SECS } else { SESSION_TTL_SECS };
         self.save_with_ttl(ttl).await;
     }
 
-    async fn save_with_ttl(&self, hours: i64) {
+    async fn save_with_ttl(&self, secs: i64) {
         let data    = serde_json::to_string(&self.data).unwrap_or_else(|_| "{}".into());
-        let expires = (Utc::now() + chrono::Duration::hours(hours)).to_rfc3339();
+        let expires = now_unix() + secs;
 
         let _ = sqlx::query(
             "INSERT INTO sessions (id, data, user_id, expires_at)
@@ -113,6 +134,7 @@ impl Session {
         let old_id  = self.id.clone();
         self.id     = Uuid::new_v4().to_string();
         self.is_new = true;
+        self.dirty  = true;
 
         let _ = sqlx::query("DELETE FROM sessions WHERE id = ?")
             .bind(&old_id)
@@ -140,7 +162,7 @@ impl Session {
 
     pub fn remember_cookie_header(&self, secure: bool) -> HeaderValue {
         let secure_flag  = if secure { "; Secure" } else { "" };
-        let max_age_secs = REMEMBER_TTL_DAYS * 24 * 3600;
+        let max_age_secs = REMEMBER_TTL_SECS;
         let val = format!(
             "{}=1; HttpOnly; SameSite=Lax; Path=/; Max-Age={max_age_secs}{secure_flag}",
             REMEMBER_COOKIE_NAME,
@@ -171,7 +193,7 @@ pub fn clear_cookies(secure: bool) -> AppendHeaders<[(header::HeaderName, Header
 
 pub async fn delete_expired(pool: &SqlitePool) {
     let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < ?")
-        .bind(Utc::now().to_rfc3339())
+        .bind(now_unix())
         .execute(pool)
         .await;
 }
