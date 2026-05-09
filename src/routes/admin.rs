@@ -78,17 +78,33 @@ fn base_url_from_request(headers: &HeaderMap) -> String {
 }
 
 async fn build_ctx(state: &Arc<AppState>) -> Result<Context, AppErrorResponse> {
-    let users   = get_all_users(&state.pool)
+    let all_users = get_all_users(&state.pool)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(state), e))?;
     let clients = get_all_clients(&state.pool)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(state), e))?;
 
+    let mut unapproved = Vec::new();
+    let mut approved   = Vec::new();
+    let mut deleted    = Vec::new();
+
+    for user in all_users {
+        if user.deleted_at.is_some() {
+            deleted.push(user);
+        } else if user.approved {
+            approved.push(user);
+        } else {
+            unapproved.push(user);
+        }
+    }
+
     let mut ctx = Context::new();
-    ctx.insert("title",   "Admin Panel");
-    ctx.insert("users",   &users);
-    ctx.insert("clients", &clients);
+    ctx.insert("title",      "Admin Panel");
+    ctx.insert("unapproved", &unapproved);
+    ctx.insert("approved",   &approved);
+    ctx.insert("deleted",    &deleted);
+    ctx.insert("clients",    &clients);
     Ok(ctx)
 }
 
@@ -107,6 +123,7 @@ pub async fn render_admin(
 }
 
 pub async fn handle_approve(
+    session:      Session,
     State(state): State<Arc<AppState>>,
     Form(form):   Form<ApproveForm>,
 ) -> Result<Response, AppErrorResponse> {
@@ -123,6 +140,7 @@ pub async fn handle_approve(
     }
 
     let mut ctx = build_ctx(&state).await?;
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
     ctx.insert("success", "User approval status updated.");
 
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
@@ -131,6 +149,7 @@ pub async fn handle_approve(
 }
 
 pub async fn handle_toggle_admin(
+    session:      Session,
     State(state): State<Arc<AppState>>,
     Form(form):   Form<AdminForm>,
 ) -> Result<Response, AppErrorResponse> {
@@ -141,6 +160,7 @@ pub async fn handle_toggle_admin(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
     ctx.insert("success", "User admin status updated.");
 
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
@@ -149,6 +169,7 @@ pub async fn handle_toggle_admin(
 }
 
 pub async fn handle_issue_reset(
+    session:      Session,
     State(state): State<Arc<AppState>>,
     headers:      HeaderMap,
     Form(form):   Form<ResetForm>,
@@ -159,6 +180,7 @@ pub async fn handle_issue_reset(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
     ctx.insert("reset_url", &reset_url);
 
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
@@ -167,6 +189,7 @@ pub async fn handle_issue_reset(
 }
 
 pub async fn handle_create_client(
+    session:      Session,
     State(state): State<Arc<AppState>>,
     Form(form):   Form<CreateClientForm>,
 ) -> Result<Response, AppErrorResponse> {
@@ -188,6 +211,7 @@ pub async fn handle_create_client(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
     ctx.insert("new_client_id",     &id);
     ctx.insert("new_client_secret", &secret);
 
@@ -197,6 +221,7 @@ pub async fn handle_create_client(
 }
 
 pub async fn handle_delete_client(
+    session:      Session,
     State(state): State<Arc<AppState>>,
     Form(form):   Form<DeleteClientForm>,
 ) -> Result<Response, AppErrorResponse> {
@@ -205,6 +230,7 @@ pub async fn handle_delete_client(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
     ctx.insert("success", "OAuth client deleted.");
 
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
@@ -252,6 +278,7 @@ pub async fn handle_force_delete(
     }
  
     let mut ctx = build_ctx(&state).await?;
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
     ctx.insert("success", "User deleted.");
  
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
