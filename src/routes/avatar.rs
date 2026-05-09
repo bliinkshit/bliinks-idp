@@ -178,8 +178,13 @@ pub async fn handle_upload(
         }
     };
 
-    let gif_bytes = if is_gif(&data) { process_gif(&data) } else { process_static(&data) }
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+    let data_vec = data.to_vec();
+    let gif_bytes = tokio::task::spawn_blocking(move || {
+        if is_gif(&data_vec) { process_gif(&data_vec) } else { process_static(&data_vec) }
+    })
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     fs::create_dir_all(AVATAR_DIR)
         .await
