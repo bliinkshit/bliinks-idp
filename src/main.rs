@@ -55,6 +55,7 @@ async fn main() -> Result<(), AppError> {
     let pool  = init_pool(&CONFIG.database.url).await?;
     let tera  = Tera::new("templates/**/*")?;
     let state = Arc::new(AppState { tera, pool });
+    let pool  = state.pool.clone();
 
     let cleanup_pool = state.pool.clone();
     tokio::spawn(async move {
@@ -130,7 +131,17 @@ async fn main() -> Result<(), AppError> {
 
     let listener = tokio::net::TcpListener::bind(CONFIG.server.addr()).await?;
     info!("listening on http://{}", CONFIG.server.addr());
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+            info!("shutdown signal received, draining connections...");
+        })
+        .await?;
+
+    info!("closing database pool...");
+    pool.close().await;
+    info!("goodbye~");
 
     Ok(())
 }

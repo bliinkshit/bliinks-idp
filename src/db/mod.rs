@@ -3,17 +3,26 @@ pub mod models;
 pub mod queries;
 pub mod oauth_queries;
 
-use sqlx::{sqlite::SqlitePoolOptions, Executor, SqlitePool};
+use sqlx::{sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous, SqlitePoolOptions}, SqlitePool};
 use sqlx::migrate::Migrate;
 use tracing::info;
+use std::str::FromStr;
 
 use crate::error::AppError;
 
 pub async fn init_pool(url: &str) -> Result<SqlitePool, AppError> {
+    let opts = SqliteConnectOptions::from_str(url)
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .foreign_keys(true)
+        .create_if_missing(true);
+
     let pool = SqlitePoolOptions::new()
         .max_connections(10)
         .idle_timeout(std::time::Duration::from_secs(600))
-        .connect(url)
+        .connect_with(opts)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -25,19 +34,9 @@ pub async fn init_pool(url: &str) -> Result<SqlitePool, AppError> {
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        for pragma in &[
-            "PRAGMA journal_mode=WAL",
-            "PRAGMA synchronous=NORMAL",
-            "PRAGMA busy_timeout=5000",
-            "PRAGMA foreign_keys=ON",
-        ] {
-            conn.execute(*pragma).await
-                .map_err(|e| AppError::Internal(e.to_string()))?;
-        }
-
         let applied = Migrate::list_applied_migrations(&mut *conn)
             .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
+            .unwrap_or_default();
 
         for migration in migrator.iter() {
             if applied.iter().any(|m| m.version == migration.version) {
