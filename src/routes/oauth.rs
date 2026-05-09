@@ -403,6 +403,7 @@ pub struct UserinfoResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub picture:      Option<String>,
     pub date_created: String,
+    pub admin:        bool,
 }
 
 pub async fn handle_userinfo(
@@ -459,6 +460,7 @@ pub async fn handle_userinfo(
         color:        if has_profile { user.color } else { None },
         picture,
         date_created: user.date_created,
+        admin:        user.admin,
     })
     .into_response()
 }
