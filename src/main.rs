@@ -119,6 +119,7 @@ async fn main() -> Result<(), AppError> {
         .merge(oauth_routes)
         .fallback(routes::serve::static_or_error)
         .layer(DefaultBodyLimit::max(5 * 1024 * 1024))
+        .layer(middleware::timeout_layer())
         .layer(axum_middleware::from_fn(middleware::security_headers))
         .layer(axum_middleware::from_fn_with_state(state.clone(), inject_pool))
         .with_state(state);

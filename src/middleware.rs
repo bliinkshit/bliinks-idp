@@ -10,6 +10,7 @@ use governor::middleware::StateInformationMiddleware;
 use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 };
+use tower_http::timeout::TimeoutLayer;
 
 use crate::{
     db::queries::get_user_by_id,
@@ -106,4 +107,8 @@ pub async fn require_admin(
     }
 
     next.run(req).await
+}
+
+pub fn timeout_layer() -> TimeoutLayer {
+    TimeoutLayer::new(std::time::Duration::from_secs(30))
 }
