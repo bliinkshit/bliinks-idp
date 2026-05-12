@@ -35,3 +35,15 @@ body {
 .table {
 	width: 100%;
 }
+
+.mascot {
+	position: fixed;
+	right: 10px;
+	bottom: 10px;
+}
+
+.mascot img {
+	width: 200px;
+	height: auto;
+	display: block;
+}
