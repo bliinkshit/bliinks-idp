@@ -29,6 +29,7 @@ use crate::{
     routes::auth::{USER_SESSION_KEY, OAUTH_NEXT_KEY},
     session::Session,
     AppState,
+    helpers::{get_user_ctx},
 };
 
 fn oauth_error(error: &str, description: &str) -> Response {
@@ -112,6 +113,8 @@ pub async fn render_authorize(
     State(state): State<Arc<AppState>>,
     Query(query): Query<AuthorizeQuery>,
 ) -> Result<Response, AppErrorResponse> {
+    let start = Instant::now();
+
     if session.get::<String>(USER_SESSION_KEY).is_none() {
         let mut next = format!(
             "/oauth/authorize?client_id={}&redirect_uri={}&response_type={}",
@@ -170,7 +173,9 @@ pub async fn render_authorize(
     ctx.insert("state",        query.state.as_deref().unwrap_or(""));
     ctx.insert("has_profile",  &scopes.contains(scopes::PROFILE));
 
-    render(&state.tera, "auth/authorize.html", &mut ctx, Instant::now())
+    get_user_ctx(&state.pool, &session, &mut ctx).await;
+
+    render(&state.tera, "auth/authorize.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
