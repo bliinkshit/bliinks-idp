@@ -226,13 +226,6 @@ pub async fn handle_register(
     if let Err(msg) = validate_password(&form.password, &form.password_repeat) {
         render_err!(state, "auth/register.html", ctx, msg, start);
     }
-    if get_user_by_username(&state.pool, username)
-        .await
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
-        .is_some()
-    {
-        render_err!(state, "auth/register.html", ctx, "That username is already taken.", start);
-    }
 
     let password = form.password.clone();
     let hash = tokio::task::spawn_blocking(move || {
@@ -248,9 +241,13 @@ pub async fn handle_register(
     let id      = Uuid::new_v4().to_string();
     let created = chrono::Utc::now().to_rfc3339();
 
-    create_user(&state.pool, &id, username, &hash, &created)
+    let inserted = create_user(&state.pool, &id, username, &hash, &created)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+    if !inserted {
+        render_err!(state, "auth/register.html", ctx, "That username is already taken.", start);
+    }
 
     ctx.insert(
         "success",

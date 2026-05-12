@@ -11,9 +11,9 @@ pub async fn create_user(
     username: &str,
     password: &str,
     created:  &str,
-) -> Result<(), AppError> {
-    sqlx::query(
-        "INSERT INTO users (id, username, password, approved, admin, color, date_created)
+) -> Result<bool, AppError> {
+    let result = sqlx::query(
+        "INSERT OR IGNORE INTO users (id, username, password, approved, admin, color, date_created)
          VALUES (?, ?, ?, 0, 0, NULL, ?)",
     )
     .bind(id)
@@ -24,7 +24,7 @@ pub async fn create_user(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Ok(())
+    Ok(result.rows_affected() > 0)
 }
 
 pub async fn get_user_by_username(
