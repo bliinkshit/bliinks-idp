@@ -8,6 +8,10 @@ default-run = "bliinks-idp"
 name = "migrate_legacy"
 path = "src/bin/migrate_legacy.rs"
 
+[[bin]]
+name = "seed_rbac"
+path = "src/bin/seed_rbac.rs"
+
 [dependencies]
 axum = { version = "0.7", features = ["multipart", "macros"] }
 tera = "1"
