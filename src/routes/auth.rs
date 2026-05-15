@@ -86,6 +86,7 @@ pub async fn render_redirect() -> Redirect {
 }
 
 pub async fn render_login(
+    session:      Session,
     State(state): State<Arc<AppState>>,
     Query(query): Query<LoginQuery>,
 ) -> Result<Html<String>, AppErrorResponse> {
@@ -94,16 +95,20 @@ pub async fn render_login(
     if query.reset.as_deref() == Some("1") {
         ctx.insert("success", "Password reset! You can now log in with your new password.");
     }
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
     render(&state.tera, "auth/login.html", &mut ctx, start)
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
 
 pub async fn render_register(
+    session:      Session,
     State(state): State<Arc<AppState>>,
 ) -> Result<Html<String>, AppErrorResponse> {
     let start = Instant::now();
-    render(&state.tera, "auth/register.html", &mut Context::new(), start)
+    let mut ctx = Context::new();
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
+    render(&state.tera, "auth/register.html", &mut ctx, start)
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }

@@ -12,8 +12,20 @@ use crate::{
 };
 
 pub async fn get_user_ctx(pool: &SqlitePool, roles: &RoleCache, session: &Session, ctx: &mut Context) {
-    let Some(user_id) = session.get::<String>(USER_SESSION_KEY) else { return };
-    let Ok(Some(user)) = get_user_by_id(pool, &user_id).await else { return };
+    let Some(user_id) = session.get::<String>(USER_SESSION_KEY) else {
+        ctx.insert("auth_username",     &Option::<String>::None);
+        ctx.insert("auth_role",         &"");
+        ctx.insert("auth_display_name", &Option::<String>::None);
+        ctx.insert("auth_color",        &Option::<String>::None);
+        return;
+    };
+    let Ok(Some(user)) = get_user_by_id(pool, &user_id).await else {
+        ctx.insert("auth_username",     &Option::<String>::None);
+        ctx.insert("auth_role",         &"");
+        ctx.insert("auth_display_name", &Option::<String>::None);
+        ctx.insert("auth_color",        &Option::<String>::None);
+        return;
+    };
     let role_name = roles.name_for_id(&user.role).unwrap_or_default();
     ctx.insert("auth_username",     &user.username);
     ctx.insert("auth_role",         &role_name);
