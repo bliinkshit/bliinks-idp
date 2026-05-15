@@ -13,6 +13,7 @@ use gif::{DecodeOptions, Encoder, Frame, Repeat};
 use image::{imageops::FilterType, RgbaImage};
 use tokio::fs;
 
+// internal
 use crate::{
     db::queries::{get_user_by_id, set_avatar_updated_at},
     error::{AppError, AppErrorResponse},

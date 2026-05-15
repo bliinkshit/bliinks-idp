@@ -11,6 +11,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use sha2::{Digest, Sha256};
 use yaptcha::{Captcha, captcha::CaptchaConfig};
 
+// internal
 use crate::{
     error::AppErrorResponse,
     session::Session,
