@@ -16,7 +16,7 @@
     {% endif %}
 
     <h2>Pending Approval</h2>
-    {% if unapproved %}
+    {% if pending %}
     <table class="table" border="1" cellpadding="4" cellspacing="0">
         <tr>
             <th>Avatar</th>
@@ -25,18 +25,16 @@
             <th>Created</th>
             <th>Actions</th>
         </tr>
-        {% for user in unapproved %}
+        {% for user in pending %}
         <tr>
             <td>{% if user.avatar_updated_at %}<img width="50px" height="50px" src="/avatars/{{ user.id }}">{% else %}None{% endif %}</td>
-            <td>
-                <span {% if user.color %}style="color:{{user.color}};"{% endif %}>{{ user.username }}</span>
-            </td>
+            <td><span {% if user.color %}style="color:{{user.color}};"{% endif %}>{{ user.username }}</span></td>
             <td>{{ user.id }}</td>
             <td>{{ user.date_created | date(format="%b %d %Y") }}</td>
             <td>
-                <form action="/admin/approve" method="POST">
+                <form action="/admin/role" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <input type="hidden" name="approved" value="1">
+                    <input type="hidden" name="role" value="member">
                     <input type="submit" value="Approve">
                 </form>
                 <form action="/admin/delete" method="POST">
@@ -52,58 +50,88 @@
     {% endif %}
 
     <h2>Users</h2>
-    {% if approved %}
+    {% if active %}
     <table class="table" border="1" cellpadding="4" cellspacing="0">
         <tr>
             <th>Avatar</th>
             <th>Username</th>
             <th>ID</th>
-            <th>Admin</th>
+            <th>Role</th>
             <th>Created</th>
             <th>Actions</th>
         </tr>
-        {% for user in approved %}
+        {% for user in active %}
         <tr>
             <td>{% if user.avatar_updated_at %}<img width="50px" height="50px" src="/avatars/{{ user.id }}">{% else %}None{% endif %}</td>
-            <td>
-                <span {% if user.color %}style="color:{{user.color}};"{% endif %}>{{ user.username }}</span>
-            </td>
+            <td><span {% if user.color %}style="color:{{user.color}};"{% endif %}>{{ user.username }}</span></td>
             <td>{{ user.id }}</td>
-            <td>{% if user.admin %}Yes{% else %}No{% endif %}</td>
+            <td>{{ user.role }}</td>
             <td>{{ user.date_created | date(format="%b %d %Y") }}</td>
             <td>
-                <form action="/admin/approve" method="POST">
+                {% if user.role == "admin" %}
+                <form action="/admin/role" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <input type="hidden" name="approved" value="0">
-                    <input type="submit" value="Disapprove">
-                </form>
-                {% if user.admin %}
-                <form action="/admin/toggle-admin" method="POST">
-                    <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <input type="hidden" name="admin" value="0">
+                    <input type="hidden" name="role" value="member">
                     <input type="submit" value="Revoke Admin">
                 </form>
                 {% else %}
-                <form action="/admin/toggle-admin" method="POST">
+                <form action="/admin/role" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <input type="hidden" name="admin" value="1">
+                    <input type="hidden" name="role" value="admin">
                     <input type="submit" value="Make Admin">
                 </form>
                 {% endif %}
+                <form action="/admin/role" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="hidden" name="role" value="banned">
+                    <input type="submit" value="Ban">
+                </form>
                 <form action="/admin/reset" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
                     <input type="submit" value="Issue Reset Link">
                 </form>
                 <form action="/admin/delete" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <input type="submit" value="Force Delete" disabled>
+                    <input type="submit" value="Force Delete">
                 </form>
             </td>
         </tr>
         {% endfor %}
     </table>
     {% else %}
-    <p>No approved users.</p>
+    <p>No active users.</p>
+    {% endif %}
+
+    <h2>Banned Users</h2>
+    {% if banned %}
+    <table class="table" border="1" cellpadding="4" cellspacing="0">
+        <tr>
+            <th>Username</th>
+            <th>ID</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+        {% for user in banned %}
+        <tr>
+            <td>{{ user.username }}</td>
+            <td>{{ user.id }}</td>
+            <td>{{ user.date_created | date(format="%b %d %Y") }}</td>
+            <td>
+                <form action="/admin/role" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="hidden" name="role" value="member">
+                    <input type="submit" value="Unban">
+                </form>
+                <form action="/admin/delete" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <input type="submit" value="Force Delete">
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No banned users.</p>
     {% endif %}
 
     <h2>Deleted Users</h2>

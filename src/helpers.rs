@@ -3,24 +3,28 @@ use sqlx::SqlitePool;
 use tera::Context;
 use axum::http::HeaderMap;
 
+// internal
 use crate::{
     db::{models::User, queries::get_user_by_id},
+    rbac::RoleCache,
     routes::auth::USER_SESSION_KEY,
     session::Session,
 };
 
-pub async fn get_user_ctx(pool: &SqlitePool, session: &Session, ctx: &mut Context) {
+pub async fn get_user_ctx(pool: &SqlitePool, roles: &RoleCache, session: &Session, ctx: &mut Context) {
     let Some(user_id) = session.get::<String>(USER_SESSION_KEY) else { return };
     let Ok(Some(user)) = get_user_by_id(pool, &user_id).await else { return };
+    let role_name = roles.name_for_id(&user.role).unwrap_or_default();
     ctx.insert("auth_username",     &user.username);
-    ctx.insert("auth_is_admin",     &user.admin);
+    ctx.insert("auth_role",         &role_name);
     ctx.insert("auth_display_name", &user.display_name);
     ctx.insert("auth_color",        &user.color);
 }
 
-pub fn insert_user_ctx(ctx: &mut Context, user: &User) {
+pub fn insert_user_ctx(ctx: &mut Context, user: &User, roles: &RoleCache) {
+    let role_name = roles.name_for_id(&user.role).unwrap_or_default();
     ctx.insert("auth_username",     &user.username);
-    ctx.insert("auth_is_admin",     &user.admin);
+    ctx.insert("auth_role",         &role_name);
     ctx.insert("auth_display_name", &user.display_name);
     ctx.insert("auth_color",        &user.color);
 }
@@ -51,7 +55,7 @@ pub fn validate_password(password: &str, password_repeat: &str) -> Result<(), &'
     if password.len() < 6 {
         return Err("Password must be at least 6 characters.");
     }
-    
+
     if password != password_repeat {
         return Err("Passwords do not match.");
     }

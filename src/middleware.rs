@@ -12,6 +12,7 @@ use tower_governor::{
 };
 use tower_http::timeout::TimeoutLayer;
 
+// internal
 use crate::{
     db::queries::get_user_by_id,
     error::{AppError, AppErrorResponse},
@@ -87,22 +88,22 @@ pub async fn redirect_if_authed(session: Session, req: Request, next: Next) -> R
 }
 
 pub async fn require_admin(
-    session: Session,
+    session:      Session,
     State(state): State<Arc<AppState>>,
-    req: Request,
-    next: Next,
+    req:          Request,
+    next:         Next,
 ) -> Response {
     let user_id = match session.get::<String>(USER_SESSION_KEY) {
         Some(id) => id,
-        None => return Redirect::to("/auth/login").into_response(),
+        None     => return Redirect::to("/auth/login").into_response(),
     };
 
     let user = match get_user_by_id(&state.pool, &user_id).await {
         Ok(Some(u)) => u,
-        _ => return Redirect::to("/auth/login").into_response(),
+        _           => return Redirect::to("/auth/login").into_response(),
     };
 
-    if !user.admin {
+    if !state.roles.has_by_id(&user.role, "access_admin") {
         return AppErrorResponse(state, AppError::Forbidden).into_response();
     }
 

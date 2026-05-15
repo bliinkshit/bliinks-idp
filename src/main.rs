@@ -4,6 +4,7 @@ mod db;
 mod error;
 mod middleware;
 mod oauth;
+mod rbac;
 mod render;
 mod routes;
 mod session;
@@ -23,16 +24,18 @@ use tracing::{info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
 use std::net::SocketAddr;
 
-//internal
+// internal
 use cfg::CONFIG;
 use db::init_pool;
 use error::AppError;
+use rbac::RoleCache;
 use session::delete_expired;
 use db::queries::delete_expired_password_resets;
 
 pub struct AppState {
-    pub tera: Tera,
-    pub pool: SqlitePool,
+    pub tera:  Tera,
+    pub pool:  SqlitePool,
+    pub roles: RoleCache,
 }
 
 async fn inject_pool(
@@ -54,7 +57,12 @@ async fn main() -> Result<(), AppError> {
 
     let pool  = init_pool(&CONFIG.database.url).await?;
     let tera  = Tera::new("templates/**/*")?;
-    let state = Arc::new(AppState { tera, pool });
+    let roles = RoleCache::empty();
+    roles.reload(&pool).await?;
+    if roles.id_for_name("member").is_none() {
+        warn!("RBAC cache is empty. Run seed_rbac before accepting traffic");
+    }
+    let state = Arc::new(AppState { tera, pool, roles });
     let pool  = state.pool.clone();
 
     let cleanup_pool = state.pool.clone();
@@ -79,23 +87,22 @@ async fn main() -> Result<(), AppError> {
 
     let admin_routes = Router::new()
         .route("/admin",                get(routes::admin::render_admin))
-        .route("/admin/approve",        post(routes::admin::handle_approve))
-        .route("/admin/toggle-admin",   post(routes::admin::handle_toggle_admin))
+        .route("/admin/role",           post(routes::admin::handle_set_role))
         .route("/admin/reset",          post(routes::admin::handle_issue_reset))
-        .route("/admin/delete", post(routes::admin::handle_force_delete))
+        .route("/admin/delete",         post(routes::admin::handle_force_delete))
         .route("/admin/clients/create", post(routes::admin::handle_create_client))
         .route("/admin/clients/delete", post(routes::admin::handle_delete_client))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::require_admin));
 
     let protected_routes = Router::new()
-        .route("/auth/logout",           get(routes::auth::handle_logout))
-        .route("/settings",              get(routes::settings::render_settings))
-        .route("/settings/display-name", post(routes::settings::handle_display_name))
-        .route("/settings/color",        post(routes::settings::handle_color))
-        .route("/settings/avatar",       post(routes::avatar::handle_upload))
-        .route("/security",              get(routes::security::render_security))
-        .route("/security/reset",        post(routes::security::handle_reset))
-        .route("/security/delete",       post(routes::security::handle_delete_account))
+        .route("/auth/logout",            get(routes::auth::handle_logout))
+        .route("/settings",               get(routes::settings::render_settings))
+        .route("/settings/display-name",  post(routes::settings::handle_display_name))
+        .route("/settings/color",         post(routes::settings::handle_color))
+        .route("/settings/avatar",        post(routes::avatar::handle_upload))
+        .route("/security",               get(routes::security::render_security))
+        .route("/security/reset",         post(routes::security::handle_reset))
+        .route("/security/delete",        post(routes::security::handle_delete_account))
         .route("/security/revoke-client", post(routes::security::handle_revoke_client))
         .layer(axum_middleware::from_fn(middleware::require_auth));
 
@@ -108,7 +115,7 @@ async fn main() -> Result<(), AppError> {
         .layer(middleware::api_rate_limiter());
 
     let app = Router::new()
-        .route("/",                      get(routes::index::render_index))
+        .route("/",                 get(routes::index::render_index))
         .route("/auth",             get(routes::auth::render_redirect))
         .route("/auth/reset",       get(routes::auth::render_reset))
         .route("/auth/reset",       post(routes::auth::handle_reset))

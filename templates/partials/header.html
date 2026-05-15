@@ -6,7 +6,7 @@
         <li><a href="https://tube.bliinks.net/">Videos</a></li>
         <li><a href="https://cdn.bliinks.net/">CDN</a></li>
 
-        {% if auth_is_admin %}
+        {% if auth_role == "admin" %}
             <li><a href="/admin">Admin</a></li>
         {% endif %}
 

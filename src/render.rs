@@ -3,7 +3,7 @@ use std::time::Instant;
 use rand::seq::SliceRandom;
 use tera::{Context, Tera};
 
-//internal
+// internal
 use crate::cfg::CONFIG;
 use crate::error::AppError;
 

@@ -12,6 +12,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tera::Context;
 
+// internal
 use crate::{
     db::{
         oauth_queries::{
@@ -29,7 +30,7 @@ use crate::{
     routes::auth::{USER_SESSION_KEY, OAUTH_NEXT_KEY},
     session::Session,
     AppState,
-    helpers::{get_user_ctx},
+    helpers::get_user_ctx,
 };
 
 fn oauth_error(error: &str, description: &str) -> Response {
@@ -52,8 +53,8 @@ fn redirect_with_error(redirect_uri: &str, error: &str, state: Option<&str>) -> 
 }
 
 fn extract_client_credentials(
-    headers: &HeaderMap,
-    form_id: Option<&str>,
+    headers:     &HeaderMap,
+    form_id:     Option<&str>,
     form_secret: Option<&str>,
 ) -> Option<(String, String)> {
     if let Some(auth) = headers.get("authorization").and_then(|v| v.to_str().ok()) {
@@ -173,7 +174,7 @@ pub async fn render_authorize(
     ctx.insert("state",        query.state.as_deref().unwrap_or(""));
     ctx.insert("has_profile",  &scopes.contains(scopes::PROFILE));
 
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     render(&state.tera, "auth/authorize.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
@@ -351,8 +352,8 @@ async fn issue_token_pair(
     let access_expiry  = token::access_token_expiry();
     let refresh_expiry = token::refresh_token_expiry();
 
-    let a = create_token(&state.pool, &access_hash,  client_id, user_id, "access",   scopes, &access_expiry).await;
-    let r = create_token(&state.pool, &refresh_hash, client_id, user_id, "refresh",  scopes, &refresh_expiry).await;
+    let a = create_token(&state.pool, &access_hash,  client_id, user_id, "access",  scopes, &access_expiry).await;
+    let r = create_token(&state.pool, &refresh_hash, client_id, user_id, "refresh", scopes, &refresh_expiry).await;
 
     if a.is_err() || r.is_err() {
         return oauth_error("server_error", "Failed to issue tokens.");
@@ -408,7 +409,8 @@ pub struct UserinfoResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub picture:      Option<String>,
     pub date_created: String,
-    pub admin:        bool,
+    pub role:         String,
+    pub groups:       Vec<String>,
 }
 
 pub async fn handle_userinfo(
@@ -458,6 +460,9 @@ pub async fn handle_userinfo(
         None
     };
 
+    let role_name = state.roles.name_for_id(&user.role).unwrap_or_default();
+    let groups    = state.roles.permissions_for_id(&user.role);
+
     Json(UserinfoResponse {
         sub:          user.id,
         username:     user.username,
@@ -465,7 +470,8 @@ pub async fn handle_userinfo(
         color:        if has_profile { user.color } else { None },
         picture,
         date_created: user.date_created,
-        admin:        user.admin,
+        role:         role_name,
+        groups,
     })
     .into_response()
 }

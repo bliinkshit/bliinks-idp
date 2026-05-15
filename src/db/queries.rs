@@ -10,15 +10,17 @@ pub async fn create_user(
     id:       &str,
     username: &str,
     password: &str,
+    role_id:  &str,
     created:  &str,
 ) -> Result<bool, AppError> {
     let result = sqlx::query(
-        "INSERT OR IGNORE INTO users (id, username, password, approved, admin, color, date_created)
-         VALUES (?, ?, ?, 0, 0, NULL, ?)",
+        "INSERT OR IGNORE INTO users (id, username, password, role, color, date_created)
+         VALUES (?, ?, ?, ?, NULL, ?)",
     )
     .bind(id)
     .bind(username)
     .bind(password)
+    .bind(role_id)
     .bind(created)
     .execute(pool)
     .await
@@ -32,7 +34,7 @@ pub async fn get_user_by_username(
     username: &str,
 ) -> Result<Option<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created, deleted_at
+        "SELECT id, username, password, role, display_name, color, avatar_updated_at, date_created, deleted_at
          FROM users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -46,7 +48,7 @@ pub async fn get_user_by_id(
     id:   &str,
 ) -> Result<Option<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created, deleted_at
+        "SELECT id, username, password, role, display_name, color, avatar_updated_at, date_created, deleted_at
          FROM users WHERE id = ?",
     )
     .bind(id)
@@ -56,8 +58,8 @@ pub async fn get_user_by_id(
 }
 
 pub async fn update_user_password(
-    pool:        &SqlitePool,
-    user_id:     &str,
+    pool:          &SqlitePool,
+    user_id:       &str,
     password_hash: &str,
 ) -> Result<(), AppError> {
     sqlx::query("UPDATE users SET password = ? WHERE id = ?")
@@ -151,9 +153,10 @@ pub async fn delete_expired_password_resets(pool: &SqlitePool) {
     .execute(pool)
     .await;
 }
+
 pub async fn get_all_users(pool: &SqlitePool) -> Result<Vec<User>, AppError> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, password, approved, admin, display_name, color, avatar_updated_at, date_created, deleted_at
+        "SELECT id, username, password, role, display_name, color, avatar_updated_at, date_created, deleted_at
          FROM users ORDER BY date_created ASC",
     )
     .fetch_all(pool)
@@ -161,27 +164,13 @@ pub async fn get_all_users(pool: &SqlitePool) -> Result<Vec<User>, AppError> {
     .map_err(|e| AppError::Internal(e.to_string()))
 }
 
-pub async fn set_user_approved(
+pub async fn set_user_role(
     pool:    &SqlitePool,
     user_id: &str,
-    approved: bool,
+    role_id: &str,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE users SET approved = ? WHERE id = ?")
-        .bind(approved)
-        .bind(user_id)
-        .execute(pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-    Ok(())
-}
-
-pub async fn set_user_admin(
-    pool:    &SqlitePool,
-    user_id: &str,
-    admin:   bool,
-) -> Result<(), AppError> {
-    sqlx::query("UPDATE users SET admin = ? WHERE id = ?")
-        .bind(admin)
+    sqlx::query("UPDATE users SET role = ? WHERE id = ?")
+        .bind(role_id)
         .bind(user_id)
         .execute(pool)
         .await
@@ -232,8 +221,9 @@ pub async fn set_avatar_updated_at(
 }
 
 pub async fn delete_user(
-    pool:    &SqlitePool,
-    user_id: &str,
+    pool:       &SqlitePool,
+    user_id:    &str,
+    deleted_role_id: &str,
 ) -> Result<(), AppError> {
     let deleted_username = format!("deleted_{}", &user_id[..12]);
     let now              = Utc::now().to_rfc3339();
@@ -241,16 +231,16 @@ pub async fn delete_user(
     sqlx::query(
         "UPDATE users
          SET deleted_at        = ?,
+             role              = ?,
              username          = ?,
              password          = '',
-             approved          = 0,
-             admin             = 0,
              display_name      = NULL,
              color             = NULL,
              avatar_updated_at = NULL
          WHERE id = ?",
     )
     .bind(&now)
+    .bind(deleted_role_id)
     .bind(&deleted_username)
     .bind(user_id)
     .execute(pool)

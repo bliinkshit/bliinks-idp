@@ -16,18 +16,17 @@ use tera::Context;
 use uuid::Uuid;
 use tokio::fs;
 
-//internal
+// internal
 use crate::{
     db::{
         oauth_queries::{
             add_redirect_uri, create_client, delete_client, get_all_clients, revoke_all_tokens_for_user,
         },
         queries::{
-            delete_sessions_for_user, get_all_users, issue_password_reset, set_user_admin,
-            set_user_approved, delete_user,
+            delete_sessions_for_user, delete_user, get_all_users, issue_password_reset, set_user_role,
         },
     },
-    error::AppErrorResponse,
+    error::{AppError, AppErrorResponse},
     render::render,
     AppState,
     session::{clear_cookies, Session},
@@ -36,15 +35,9 @@ use crate::{
 };
 
 #[derive(Deserialize)]
-pub struct ApproveForm {
-    pub user_id:  String,
-    pub approved: String,
-}
-
-#[derive(Deserialize)]
-pub struct AdminForm {
+pub struct SetRoleForm {
     pub user_id: String,
-    pub admin:   String,
+    pub role:    String,
 }
 
 #[derive(Deserialize)]
@@ -63,17 +56,20 @@ pub struct DeleteClientForm {
     pub client_id: String,
 }
 
+#[derive(Deserialize)]
+pub struct ForceDeleteForm {
+    pub user_id: String,
+}
+
 fn base_url_from_request(headers: &HeaderMap) -> String {
     let host = headers
         .get("host")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
-
     let scheme = headers
         .get("x-forwarded-proto")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("http");
-
     format!("{}://{}", scheme, host)
 }
 
@@ -85,84 +81,87 @@ async fn build_ctx(state: &Arc<AppState>) -> Result<Context, AppErrorResponse> {
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(state), e))?;
 
-    let mut unapproved = Vec::new();
-    let mut approved   = Vec::new();
-    let mut deleted    = Vec::new();
+    let deleted_id = state.roles.id_for_name("deleted").unwrap_or_default();
+    let banned_id  = state.roles.id_for_name("banned").unwrap_or_default();
+    let pending_id = state.roles.id_for_name("pending").unwrap_or_default();
+
+    let mut pending  = Vec::new();
+    let mut active   = Vec::new();
+    let mut banned   = Vec::new();
+    let mut deleted  = Vec::new();
 
     for user in all_users {
-        if user.deleted_at.is_some() {
+        if user.role == deleted_id {
             deleted.push(user);
-        } else if user.approved {
-            approved.push(user);
+        } else if user.role == banned_id {
+            banned.push(user);
+        } else if user.role == pending_id {
+            pending.push(user);
         } else {
-            unapproved.push(user);
+            active.push(user);
         }
     }
 
     let mut ctx = Context::new();
-    ctx.insert("title",      "Admin Panel");
-    ctx.insert("unapproved", &unapproved);
-    ctx.insert("approved",   &approved);
-    ctx.insert("deleted",    &deleted);
-    ctx.insert("clients",    &clients);
+    ctx.insert("title",   "Admin Panel");
+    ctx.insert("pending", &pending);
+    ctx.insert("active",  &active);
+    ctx.insert("banned",  &banned);
+    ctx.insert("deleted", &deleted);
+    ctx.insert("clients", &clients);
     Ok(ctx)
+}
+
+fn resolve_role_id(state: &Arc<AppState>, role_name: &str) -> Option<String> {
+    let allowed = ["pending", "member", "admin", "banned"];
+    if !allowed.contains(&role_name) {
+        return None;
+    }
+    state.roles.id_for_name(role_name)
 }
 
 pub async fn render_admin(
     session:      Session,
     State(state): State<Arc<AppState>>,
 ) -> Result<Html<String>, AppErrorResponse> {
-    let start = Instant::now();
+    let start   = Instant::now();
     let mut ctx = build_ctx(&state).await?;
-
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
-
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
     render(&state.tera, "admin.html", &mut ctx, start)
         .map(Html)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
 
-pub async fn handle_approve(
+pub async fn handle_set_role(
     session:      Session,
     State(state): State<Arc<AppState>>,
-    Form(form):   Form<ApproveForm>,
+    Form(form):   Form<SetRoleForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let approved = form.approved == "1";
+    let role_id = match resolve_role_id(&state, &form.role) {
+        Some(id) => id,
+        None     => {
+            let mut ctx = build_ctx(&state).await?;
+            get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
+            ctx.insert("error", "Invalid role.");
+            return render(&state.tera, "admin.html", &mut ctx, Instant::now())
+                .map(|html| Html(html).into_response())
+                .map_err(|e| AppErrorResponse(Arc::clone(&state), e));
+        }
+    };
 
-    set_user_approved(&state.pool, &form.user_id, approved)
+    set_user_role(&state.pool, &form.user_id, &role_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    if !approved {
+    if matches!(form.role.as_str(), "banned" | "pending") {
         delete_sessions_for_user(&state.pool, &form.user_id)
             .await
             .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
     }
 
     let mut ctx = build_ctx(&state).await?;
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
-    ctx.insert("success", "User approval status updated.");
-
-    render(&state.tera, "admin.html", &mut ctx, Instant::now())
-        .map(|html| Html(html).into_response())
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
-}
-
-pub async fn handle_toggle_admin(
-    session:      Session,
-    State(state): State<Arc<AppState>>,
-    Form(form):   Form<AdminForm>,
-) -> Result<Response, AppErrorResponse> {
-    let admin = form.admin == "1";
-
-    set_user_admin(&state.pool, &form.user_id, admin)
-        .await
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
-
-    let mut ctx = build_ctx(&state).await?;
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
-    ctx.insert("success", "User admin status updated.");
-
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
+    ctx.insert("success", "User role updated.");
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
@@ -180,9 +179,8 @@ pub async fn handle_issue_reset(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
     ctx.insert("reset_url", &reset_url);
-
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
@@ -199,7 +197,7 @@ pub async fn handle_create_client(
     let salt = SaltString::generate(&mut OsRng);
     let hash = Argon2::default()
         .hash_password(secret.as_bytes(), &salt)
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), crate::error::AppError::Internal(e.to_string())))?
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
         .to_string();
 
     create_client(&state.pool, &id, &hash, form.name.trim())
@@ -211,10 +209,9 @@ pub async fn handle_create_client(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
     ctx.insert("new_client_id",     &id);
     ctx.insert("new_client_secret", &secret);
-
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
@@ -230,17 +227,11 @@ pub async fn handle_delete_client(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
     ctx.insert("success", "OAuth client deleted.");
-
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
-}
-
-#[derive(Deserialize)]
-pub struct ForceDeleteForm {
-    pub user_id: String,
 }
 
 pub async fn handle_force_delete(
@@ -249,38 +240,37 @@ pub async fn handle_force_delete(
     Form(form):   Form<ForceDeleteForm>,
 ) -> Result<Response, AppErrorResponse> {
     let secure = !crate::cfg::CONFIG.general.dev;
- 
-    delete_user(&state.pool, &form.user_id)
+
+    let deleted_role_id = state.roles.id_for_name("deleted")
+        .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("RBAC: deleted role not found in cache.".into())))?;
+
+    delete_user(&state.pool, &form.user_id, &deleted_role_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
- 
+
     delete_sessions_for_user(&state.pool, &form.user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
- 
+
     revoke_all_tokens_for_user(&state.pool, &form.user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
- 
+
     let _ = fs::remove_file(format!("{}/{}.gif", AVATAR_DIR, form.user_id)).await;
- 
+
     let self_delete = session
         .get::<String>(crate::routes::auth::USER_SESSION_KEY)
         .map(|id| id == form.user_id)
         .unwrap_or(false);
- 
+
     if self_delete {
         session.destroy().await;
-        return Ok((
-            clear_cookies(secure),
-            Redirect::to("/auth/login"),
-        ).into_response());
+        return Ok((clear_cookies(secure), Redirect::to("/auth/login")).into_response());
     }
- 
+
     let mut ctx = build_ctx(&state).await?;
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
     ctx.insert("success", "User deleted.");
- 
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))

@@ -9,7 +9,7 @@ use axum::{
 use serde::Deserialize;
 use tera::Context;
 
-//internal
+// internal
 use crate::{
     db::{models::User, queries::{get_user_by_id, update_user_color, update_user_display_name}},
     error::{AppError, AppErrorResponse},
@@ -44,7 +44,7 @@ async fn settings_ctx(
     ctx.insert("username",     &user.username);
     ctx.insert("display_name", &user.display_name);
     ctx.insert("color",        &user.color);
-    insert_user_ctx(&mut ctx, &user);
+    insert_user_ctx(&mut ctx, &user, &state.roles);
 
     Ok((ctx, user))
 }

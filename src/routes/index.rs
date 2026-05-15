@@ -8,6 +8,7 @@ use axum::{
 };
 use tera::Context;
 
+// internal
 use crate::{
     error::AppErrorResponse,
     render::render,
@@ -23,7 +24,7 @@ pub async fn render_index(
     let start = Instant::now();
     let mut ctx = Context::new();
 
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     render(&state.tera, "index.html", &mut ctx, start)
         .map(Html)

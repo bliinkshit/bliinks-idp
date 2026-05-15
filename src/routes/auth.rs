@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use tera::Context;
 use uuid::Uuid;
 
-//internal
+// internal
 use crate::{
     db::queries::{
         create_user, delete_sessions_for_user, get_password_reset,
@@ -177,7 +177,13 @@ pub async fn handle_login(
         render_err!(state, "auth/login.html", ctx, "Invalid username or password.", start);
     }
 
-    if !user.approved {
+    let role_name = state.roles.name_for_id(&user.role).unwrap_or_default();
+
+    if role_name == "banned" {
+        render_err!(state, "auth/login.html", ctx, "Your account has been banned.", start);
+    }
+
+    if !state.roles.has_by_id(&user.role, "login") {
         render_err!(state, "auth/login.html", ctx, "Your account is pending admin approval.", start);
     }
 
@@ -227,6 +233,9 @@ pub async fn handle_register(
         render_err!(state, "auth/register.html", ctx, msg, start);
     }
 
+    let pending_role_id = state.roles.id_for_name("pending")
+        .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("RBAC: pending role not found in cache.".into())))?;
+
     let password = form.password.clone();
     let hash = tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(&mut OsRng);
@@ -241,7 +250,7 @@ pub async fn handle_register(
     let id      = Uuid::new_v4().to_string();
     let created = chrono::Utc::now().to_rfc3339();
 
-    let inserted = create_user(&state.pool, &id, username, &hash, &created)
+    let inserted = create_user(&state.pool, &id, username, &hash, &pending_role_id, &created)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -273,7 +282,7 @@ pub async fn handle_reset(
     let mut ctx    = Context::new();
     ctx.insert("token", &form.token);
 
-    get_user_ctx(&state.pool, &session, &mut ctx).await;
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     let reset = get_password_reset(&state.pool, &token_hash)
         .await
