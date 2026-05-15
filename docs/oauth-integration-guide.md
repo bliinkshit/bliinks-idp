@@ -21,7 +21,7 @@ Request only what you need:
 
 | Scope | What you get |
 |-------|-------------|
-| `openid` | User's ID (`sub`), username, and account creation date. Required. |
+| `openid` | User's ID (`sub`), username, account creation date, and role. Required. |
 | `profile` | Display name, colour preference, and avatar (if set). |
 
 ---
@@ -99,7 +99,8 @@ Response for `openid` scope:
 {
   "sub": "user-uuid",
   "username": "salem",
-  "date_created": "2024-01-15T10:30:00Z"
+  "date_created": "2024-01-15T10:30:00Z",
+  "role": "member"
 }
 ```
 
@@ -110,15 +111,29 @@ Response for `openid profile` scope:
   "sub": "user-uuid",
   "username": "salem",
   "date_created": "2024-01-15T10:30:00Z",
+  "role": "member",
   "display_name": "Salem",
   "color": "#ff6b6b",
   "picture": "https://bliinks.net/avatars/user-uuid?v=2024-01-15T10:30:00Z"
 }
 ```
 
-`picture` is omitted if the user has not set an avatar.
+`display_name`, `color`, and `picture` are omitted if not set by the user.
+
+#### The `role` field
+
+`role` is always present and reflects the user's standing on the Bliinks network. Possible values:
+
+| Role | Meaning |
+|------|---------|
+| `member` | Standard approved user |
+| `admin` | Network administrator |
+| `pending` | Awaiting admin approval: should not normally receive a token |
+| `banned` | Banned account: should not normally receive a token |
 
 Use `sub` as the user's unique identifier in your own database. Do not use `username` as a key since it may change in the future.
+
+If you want to gate features in your own app based on Bliinks role (for example, giving admins elevated access) check the `role` field. Be aware that roles are defined by Bliinks and new values may be introduced in the future, so handle unknown roles gracefully.
 
 ---
 
@@ -236,11 +251,12 @@ app.get('/callback', async (req, res) => {
 
   const { access_token, refresh_token } = await tokenRes.json();
 
-  const userRes  = await fetch('https://bliinks.net/oauth/userinfo', {
+  const userRes = await fetch('https://bliinks.net/oauth/userinfo', {
     headers: { Authorization: `Bearer ${access_token}` },
   });
   const user = await userRes.json();
 
+  // user.role will be 'member', 'admin', etc.
   req.session.user         = user;
   req.session.accessToken  = access_token;
   req.session.refreshToken = refresh_token;
@@ -263,7 +279,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
@@ -279,10 +294,8 @@ var (
 
 func main() {
 	app := fiber.New()
-
 	app.Get("/login", handleLogin)
 	app.Get("/callback", handleCallback)
-
 	app.Listen(":3000")
 }
 
@@ -348,6 +361,7 @@ func handleCallback(c *fiber.Ctx) error {
 
 	body, _ := io.ReadAll(userRes.Body)
 
+	// Decoded body contains role field, e.g. "member" or "admin"
 	sess.Set("user", string(body))
 	sess.Set("access_token", tokens.AccessToken)
 	sess.Set("refresh_token", tokens.RefreshToken)
@@ -368,8 +382,8 @@ from flask import Flask, redirect, request, session, url_for
 app = Flask(__name__)
 app.secret_key = os.environ['FLASK_SECRET']
 
-BASE_URL   = 'https://bliinks.net'
-CLIENT_ID  = os.environ['CLIENT_ID']
+BASE_URL      = 'https://bliinks.net'
+CLIENT_ID     = os.environ['CLIENT_ID']
 CLIENT_SECRET = os.environ['CLIENT_SECRET']
 REDIRECT_URI  = 'https://yourapp.com/callback'
 
@@ -406,7 +420,10 @@ def callback():
     user_res = requests.get(BASE_URL + '/oauth/userinfo', headers={
         'Authorization': f"Bearer {tokens['access_token']}"
     })
-    session['user']          = user_res.json()
+    user = user_res.json()
+
+    # user['role'] will be 'member', 'admin', etc.
+    session['user']          = user
     session['access_token']  = tokens['access_token']
     session['refresh_token'] = tokens['refresh_token']
 

@@ -410,7 +410,6 @@ pub struct UserinfoResponse {
     pub picture:      Option<String>,
     pub date_created: String,
     pub role:         String,
-    pub groups:       Vec<String>,
 }
 
 pub async fn handle_userinfo(
@@ -461,7 +460,6 @@ pub async fn handle_userinfo(
     };
 
     let role_name = state.roles.name_for_id(&user.role).unwrap_or_default();
-    let groups    = state.roles.permissions_for_id(&user.role);
 
     Json(UserinfoResponse {
         sub:          user.id,
@@ -471,7 +469,6 @@ pub async fn handle_userinfo(
         picture,
         date_created: user.date_created,
         role:         role_name,
-        groups,
     })
     .into_response()
 }
