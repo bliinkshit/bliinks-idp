@@ -72,7 +72,7 @@ async fn require_role_id(pool: &sqlx::SqlitePool, name: &str) -> anyhow::Result<
         .bind(name)
         .fetch_optional(pool)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("role '{}' not found — run seed_rbac first", name))
+        .ok_or_else(|| anyhow::anyhow!("role '{}' not found. roles must be seeded before running database migrations.", name))
 }
 
 #[tokio::main]
