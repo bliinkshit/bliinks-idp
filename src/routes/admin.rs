@@ -19,6 +19,7 @@ use tokio::fs;
 // internal
 use crate::{
     db::{
+        models::User,
         oauth_queries::{
             add_redirect_uri, create_client, delete_client, get_all_clients, revoke_all_tokens_for_user,
         },
@@ -27,12 +28,41 @@ use crate::{
         },
     },
     error::{AppError, AppErrorResponse},
+    rbac::RoleCache,
     render::render,
     AppState,
     session::{clear_cookies, Session},
     routes::avatar::AVATAR_DIR,
     helpers::get_user_ctx,
 };
+
+#[derive(serde::Serialize)]
+struct TemplateUser {
+    id:                String,
+    username:          String,
+    role:              String,
+    display_name:      Option<String>,
+    color:             Option<String>,
+    avatar_updated_at: Option<String>,
+    date_created:      String,
+    deleted_at:        Option<String>,
+}
+
+impl TemplateUser {
+    fn from_user(user: User, roles: &RoleCache) -> Self {
+        let role = roles.name_for_id(&user.role).unwrap_or_default();
+        Self {
+            id:                user.id,
+            username:          user.username,
+            role,
+            display_name:      user.display_name,
+            color:             user.color,
+            avatar_updated_at: user.avatar_updated_at,
+            date_created:      user.date_created,
+            deleted_at:        user.deleted_at,
+        }
+    }
+}
 
 #[derive(Deserialize)]
 pub struct SetRoleForm {
@@ -85,20 +115,22 @@ async fn build_ctx(state: &Arc<AppState>) -> Result<Context, AppErrorResponse> {
     let banned_id  = state.roles.id_for_name("banned").unwrap_or_default();
     let pending_id = state.roles.id_for_name("pending").unwrap_or_default();
 
-    let mut pending  = Vec::new();
-    let mut active   = Vec::new();
-    let mut banned   = Vec::new();
-    let mut deleted  = Vec::new();
+    let mut pending: Vec<TemplateUser> = Vec::new();
+    let mut active:  Vec<TemplateUser> = Vec::new();
+    let mut banned:  Vec<TemplateUser> = Vec::new();
+    let mut deleted: Vec<TemplateUser> = Vec::new();
 
     for user in all_users {
-        if user.role == deleted_id {
-            deleted.push(user);
-        } else if user.role == banned_id {
-            banned.push(user);
-        } else if user.role == pending_id {
-            pending.push(user);
+        let role_id = user.role.clone();
+        let tu = TemplateUser::from_user(user, &state.roles);
+        if role_id == deleted_id {
+            deleted.push(tu);
+        } else if role_id == banned_id {
+            banned.push(tu);
+        } else if role_id == pending_id {
+            pending.push(tu);
         } else {
-            active.push(user);
+            active.push(tu);
         }
     }
 
