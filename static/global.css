@@ -9,6 +9,12 @@ html, body {
 
 body {
 	margin: 0px;
+	color: #323232;
+	background: #F9FBFF;
+}
+
+p {
+	line-height: 18px;
 }
 
 .container {
@@ -18,14 +24,39 @@ body {
 	padding: 0 20px;
 }
 
+.navbar {
+	display: table;
+	width: 100%;
+	padding: 10px 0 0;
+}
+
 .nav {
 	list-style: none;
-	padding: 10px 0;
 	margin: 0 0 10px;
+	width: 50%;
+	display: table-cell;
+	padding: 6px 10px 8px;
+	background: #313131;
+	color: #F9FBFF;
 }
 
 .nav li {
 	display: inline;
+	padding: 0 2px;
+}
+
+.nav li a {
+	text-decoration: none;
+	color: inherit;
+}
+
+.nav li a:hover,
+.nav .active a {
+	text-decoration: underline;
+}
+
+.nav-right {
+	text-align: right;
 }
 
 .footer {

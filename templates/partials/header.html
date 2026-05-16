@@ -1,24 +1,25 @@
 <div class="container">
-    <ul class="nav">
-        <li><a href="/">Home</a></li>
+    <div class="navbar">
+        <ul class="nav nav-left">
+            <li class="{% if page == "index" %}active{% endif %}"><a href="/">Home</a></li>
 
-        <li><a href="https://chat.bliinks.net">Chat</a></li>
-        <li><a href="https://tube.bliinks.net/">Videos</a></li>
-        <li><a href="https://cdn.bliinks.net/">CDN</a></li>
+            <li><a href="https://chat.bliinks.net">Chat</a></li>
+            <li><a href="https://tube.bliinks.net/">Videos</a></li>
+            <li><a href="https://cdn.bliinks.net/">CDN</a></li>
+        </ul>
+        <ul class="nav nav-right">
+            {% if auth_role == "admin" %}
+                <li class="{% if page == "admin" %}active{% endif %}"><a href="/admin">Admin</a></li>
+            {% endif %}
 
-        {% if auth_role == "admin" %}
-            <li><a href="/admin">Admin</a></li>
-        {% endif %}
-
-        {% if auth_username %}
-            <li><a href="/settings">Settings</a></li>
-            <li><a href="/security">Security</a></li>
-            <li><a href="/auth/logout">Logout</a></li>
-        {% else %}
-            <li><a href="/auth/login">Login</a></li>
-            <li><a href="/auth/register">Register</a></li>
-        {% endif %}
-
-        <!--{{page}}-->
-    </ul>
+            {% if auth_username %}
+                <li class="{% if page == "settings" %}active{% endif %}"><a href="/settings">Settings</a></li>
+                <li class="{% if page == "security" %}active{% endif %}"><a href="/security">Security</a></li>
+                <li><a href="/auth/logout">Logout</a></li>
+            {% else %}
+                <li class="{% if page == "login" %}active{% endif %}"><a href="/auth/login">Login</a></li>
+                <li class="{% if page == "register" %}active{% endif %}"><a href="/auth/register">Register</a></li>
+            {% endif %}
+        </ul>
+    </div>
 </div>
