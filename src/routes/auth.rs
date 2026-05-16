@@ -114,6 +114,7 @@ pub async fn render_register(
 }
 
 pub async fn render_reset(
+    session:      Session,
     State(state): State<Arc<AppState>>,
     Query(query): Query<TokenQuery>,
 ) -> Result<Response, AppErrorResponse> {
@@ -134,6 +135,7 @@ pub async fn render_reset(
     } else {
         ctx.insert("error", "This reset link is invalid or has expired.");
     }
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     render(&state.tera, "auth/reset.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
@@ -149,6 +151,7 @@ pub async fn handle_login(
     let secure   = !crate::cfg::CONFIG.general.dev;
     let remember = form.remember.as_deref() == Some("remember");
     let mut ctx  = Context::new();
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     if !verify_captcha(&session, &form.captcha) {
         render_err!(state, "auth/login.html", ctx, "Invalid CAPTCHA.", start);
@@ -218,6 +221,7 @@ pub async fn handle_register(
     let start = Instant::now();
     let secure  = !crate::cfg::CONFIG.general.dev;
     let mut ctx = Context::new();
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     if !verify_captcha(&session, &form.captcha) {
         render_err!(state, "auth/register.html", ctx, "Invalid CAPTCHA.", start);
