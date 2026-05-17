@@ -53,6 +53,7 @@ pub fn base_url_from_headers(headers: &HeaderMap) -> String {
     format!("{}://{}", scheme, host)
 }
 
+// to be renamed: render_client_error
 #[macro_export]
 macro_rules! render_err {
     ($state:expr, $template:expr, $ctx:expr, $msg:expr, $start:expr) => {{
@@ -61,6 +62,20 @@ macro_rules! render_err {
             .map_err(|e| $crate::error::AppErrorResponse(Arc::clone(&$state), e))?;
         return Ok(axum::response::IntoResponse::into_response(axum::response::Html(html)));
     }};
+}
+
+#[macro_export]
+macro_rules! render_server_error {
+    ($result:expr, $state:expr, $session:expr) => {
+        match $result {
+            Ok(v)  => v,
+            Err(e) => return Ok($crate::routes::error::render_error(
+                axum::extract::State(Arc::clone(&$state)),
+                $session,
+                $crate::error::AppError::Internal(e.to_string()),
+            ).await.into_response()),
+        }
+    };
 }
 
 pub fn validate_password(password: &str, password_repeat: &str) -> Result<(), &'static str> {
