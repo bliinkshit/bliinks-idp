@@ -97,7 +97,7 @@ async fn main() -> Result<(), AppError> {
     let protected_routes = Router::new()
         .route("/auth/logout",            get(routes::auth::handle_logout))
         .route("/settings",               get(routes::settings::render_settings).post(routes::settings::handle_profile))
-        .route("/settings/avatar",        post(routes::avatar::handle_upload))
+        .route("/settings/avatar",        post(routes::settings::handle_upload))
         .route("/security",               get(routes::security::render_security))
         .route("/security/reset",         post(routes::security::handle_reset))
         .route("/security/delete",        post(routes::security::handle_delete_account))

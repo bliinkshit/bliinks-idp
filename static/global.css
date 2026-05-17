@@ -78,3 +78,12 @@ p {
 	height: auto;
 	display: block;
 }
+
+.table-layout {
+	border: 0;
+}
+
+.text-small {
+	font-size: 12px;
+	color: #4F4F4F;
+}
