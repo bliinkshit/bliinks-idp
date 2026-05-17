@@ -96,9 +96,7 @@ async fn main() -> Result<(), AppError> {
 
     let protected_routes = Router::new()
         .route("/auth/logout",            get(routes::auth::handle_logout))
-        .route("/settings",               get(routes::settings::render_settings))
-        .route("/settings/display-name",  post(routes::settings::handle_display_name))
-        .route("/settings/color",         post(routes::settings::handle_color))
+        .route("/settings",               get(routes::settings::render_settings).post(routes::settings::handle_profile))
         .route("/settings/avatar",        post(routes::avatar::handle_upload))
         .route("/security",               get(routes::security::render_security))
         .route("/security/reset",         post(routes::security::handle_reset))

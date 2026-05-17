@@ -54,7 +54,7 @@ pub async fn render_settings(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
-    
+
     let user_id: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
@@ -68,14 +68,15 @@ pub async fn render_settings(
 }
 
 #[derive(Deserialize)]
-pub struct DisplayNameForm {
+pub struct ProfileForm {
     pub display_name: String,
+    pub color:        String,
 }
 
-pub async fn handle_display_name(
+pub async fn handle_profile(
     session:      Session,
     State(state): State<Arc<AppState>>,
-    Form(form):   Form<DisplayNameForm>,
+    Form(form):   Form<ProfileForm>,
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
 
@@ -84,65 +85,38 @@ pub async fn handle_display_name(
         None     => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
     };
 
-    let (mut ctx, _) = settings_ctx(&state, &user_id).await?;
+    let (mut ctx, user) = settings_ctx(&state, &user_id).await?;
 
     let name = form.display_name.trim();
-
     if name.len() > MAX_DISPLAY_NAME_LEN {
         render_err!(state, "settings.html", ctx, "Display name must be 64 characters or fewer.", start);
     }
 
-    let value = if name.is_empty() { None } else { Some(name) };
-
-    update_user_display_name(&state.pool, &user_id, value)
-        .await
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
-
-    ctx.insert("display_name",   &value);
-    ctx.insert("success_profile", "Display name updated.");
-
-    render(&state.tera, "settings.html", &mut ctx, start)
-        .map(|html| Html(html).into_response())
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
-}
-
-#[derive(Deserialize)]
-pub struct ColorForm {
-    pub color: String,
-}
-
-pub async fn handle_color(
-    session:      Session,
-    State(state): State<Arc<AppState>>,
-    Form(form):   Form<ColorForm>,
-) -> Result<Response, AppErrorResponse> {
-    let start = Instant::now();
-
-    let user_id: String = match session.get(USER_SESSION_KEY) {
-        Some(id) => id,
-        None     => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
-    };
-
-    let (mut ctx, _) = settings_ctx(&state, &user_id).await?;
+    let new_name: Option<&str> = if name.is_empty() { None } else { Some(name) };
+    if new_name != user.display_name.as_deref() {
+        update_user_display_name(&state.pool, &user_id, new_name)
+            .await
+            .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+    }
 
     let color = form.color.trim();
-
-    let value = if color.is_empty() {
+    let new_color: Option<String> = if color.is_empty() {
         None
     } else {
         if !is_valid_hex_color(color) {
             render_err!(state, "settings.html", ctx, "Color must be a valid hex value (e.g. #ff6b6b).", start);
         }
-        let normalized = format!("#{}", color.strip_prefix('#').unwrap_or(color).to_lowercase());
-        Some(normalized)
+        Some(format!("#{}", color.strip_prefix('#').unwrap_or(color).to_lowercase()))
     };
+    if new_color.as_deref() != user.color.as_deref() {
+        update_user_color(&state.pool, &user_id, new_color.as_deref())
+            .await
+            .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+    }
 
-    update_user_color(&state.pool, &user_id, value.as_deref())
-        .await
-        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
-
-    ctx.insert("color",         &value);
-    ctx.insert("success_color", "Color updated.");
+    ctx.insert("display_name", &new_name);
+    ctx.insert("color",        &new_color);
+    ctx.insert("success",      "Profile updated.");
 
     render(&state.tera, "settings.html", &mut ctx, start)
         .map(|html| Html(html).into_response())

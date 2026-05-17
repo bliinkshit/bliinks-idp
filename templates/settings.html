@@ -17,18 +17,16 @@
         <input type="submit" value="Upload">
     </form>
 
-    <h2>Display Name</h2>
-    {% if success_profile %}<p>{{ success_profile }}</p>{% endif %}
+    <h2>Profile</h2>
+    {% if success %}<p>{{ success }}</p>{% endif %}
     {% if error %}<p>{{ error }}</p>{% endif %}
-    <form action="/settings/display-name" method="POST">
-        <input type="text" name="display_name" value="{{ display_name | default(value='') }}" placeholder="Display name" maxlength="64">
-        <input type="submit" value="Save">
-    </form>
-
-    <h2>Name Color</h2>
-    {% if success_color %}<p>{{ success_color }}</p>{% endif %}
-    <form action="/settings/color" method="POST">
-        <input type="color" name="color" value="{{ color | default(value='#000000') }}">
+    <form action="/settings" method="POST">
+        <label>Display Name
+            <input type="text" name="display_name" value="{{ display_name | default(value='') }}" placeholder="Display name" maxlength="64">
+        </label>
+        <label>Name Color
+            <input type="color" name="color" value="{{ color | default(value='#000000') }}">
+        </label>
         <input type="submit" value="Save">
     </form>
 </div>
