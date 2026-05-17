@@ -16,6 +16,8 @@ use tower_http::timeout::TimeoutLayer;
 use crate::{
     db::queries::get_user_by_id,
     error::{AppError, AppErrorResponse},
+    helpers::get_user_ctx,
+    render::render,
     routes::auth::USER_SESSION_KEY,
     session::Session,
     AppState,
@@ -104,7 +106,16 @@ pub async fn require_admin(
     };
 
     if !state.roles.has_by_id(&user.role, "access_admin") {
-        return AppErrorResponse(state, AppError::Forbidden).into_response();
+        let err    = AppError::Forbidden;
+        let status = err.status();
+        let mut ctx = tera::Context::new();
+        ctx.insert("code",  &status.as_u16());
+        ctx.insert("error", &err.message());
+        get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
+        return match render(&state.tera, "error.html", &mut ctx, std::time::Instant::now()) {
+            Ok(body) => (status, axum::response::Html(body)).into_response(),
+            Err(e)   => AppErrorResponse(state, e).into_response(),
+        };
     }
 
     next.run(req).await
