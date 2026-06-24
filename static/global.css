@@ -87,3 +87,31 @@ p {
 	font-size: 12px;
 	color: #4F4F4F;
 }
+
+.settings-layout {
+	display: table;
+	width: 100%;
+}
+
+.settings-right,
+.settings-left {
+	width: 50%;
+	display: table-cell;
+}
+
+.settings-label {
+	margin: 0 0 5px;
+}
+
+.settings-input {
+	margin: 0 0 10px;
+}
+
+.settings-input[type="color"] {
+	width: 32px;
+	height: 32px;
+}
+
+.settings-submit {
+	text-align: left;
+}
