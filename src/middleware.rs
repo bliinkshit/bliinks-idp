@@ -11,6 +11,7 @@ use tower_governor::{
     governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
 };
 use tower_http::timeout::TimeoutLayer;
+use uuid::Uuid;
 
 // internal
 use crate::{
@@ -95,12 +96,17 @@ pub async fn require_admin(
     req:          Request,
     next:         Next,
 ) -> Response {
-    let user_id = match session.get::<String>(USER_SESSION_KEY) {
+    let user_id_str = match session.get::<String>(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Redirect::to("/auth/login").into_response(),
     };
 
-    let user = match get_user_by_id(&state.pool, &user_id).await {
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Redirect::to("/auth/login").into_response(),
+    };
+
+    let user = match get_user_by_id(&state.pool, user_id).await {
         Ok(Some(u)) => u,
         _           => return Redirect::to("/auth/login").into_response(),
     };

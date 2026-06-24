@@ -11,6 +11,7 @@ use axum::{
 use serde::Deserialize;
 use tera::Context;
 use tokio::fs;
+use uuid::Uuid;
 
 // internal
 use crate::{
@@ -33,19 +34,29 @@ pub async fn render_security(
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
 
-    if session.get::<String>(USER_SESSION_KEY).is_none() {
-        return Ok(Redirect::to("/auth/login").into_response());
-    }
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
+        Some(id) => id,
+        None     => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let clients_raw = get_connected_clients_for_user(&state.pool, user_id)
+        .await
+        .unwrap_or_default();
+
+    let clients: Vec<_> = clients_raw.into_iter().map(|c| serde_json::json!({
+        "id":   c.id.to_string(),
+        "name": c.name,
+    })).collect();
 
     let mut ctx = Context::new();
     ctx.insert("title", "Security");
-    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
-
-    let user_id: String = session.get(USER_SESSION_KEY).unwrap_or_default();
-    let clients = get_connected_clients_for_user(&state.pool, &user_id)
-        .await
-        .unwrap_or_default();
     ctx.insert("connected_clients", &clients);
+    get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     render(&state.tera, "security.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
@@ -65,15 +76,20 @@ pub async fn handle_reset(
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
 
-    let user_id: String = match session.get(USER_SESSION_KEY) {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
     };
 
     let mut ctx = Context::new();
     ctx.insert("title", "Security");
 
-    let user = get_user_by_id(&state.pool, &user_id)
+    let user = get_user_by_id(&state.pool, user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("User not found".into())))?;
@@ -96,7 +112,7 @@ pub async fn handle_reset(
     }
 
     let base_url  = base_url_from_headers(&headers);
-    let reset_url = issue_password_reset(&state.pool, &user_id, &base_url)
+    let reset_url = issue_password_reset(&state.pool, user_id, &base_url)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -120,15 +136,20 @@ pub async fn handle_delete_account(
     let start  = Instant::now();
     let secure = !crate::cfg::CONFIG.general.dev;
 
-    let user_id: String = match session.get(USER_SESSION_KEY) {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
     };
 
     let mut ctx = Context::new();
     ctx.insert("title", "Security");
 
-    let user = get_user_by_id(&state.pool, &user_id)
+    let user = get_user_by_id(&state.pool, user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("User not found".into())))?;
@@ -153,15 +174,15 @@ pub async fn handle_delete_account(
     let deleted_role_id = state.roles.id_for_name("deleted")
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("RBAC: deleted role not found in cache.".into())))?;
 
-    delete_user(&state.pool, &user_id, &deleted_role_id)
+    delete_user(&state.pool, user_id, deleted_role_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    delete_sessions_for_user(&state.pool, &user_id)
+    delete_sessions_for_user(&state.pool, user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    revoke_all_tokens_for_user(&state.pool, &user_id)
+    revoke_all_tokens_for_user(&state.pool, user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -182,12 +203,22 @@ pub async fn handle_revoke_client(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<RevokeClientForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let user_id: String = match session.get(USER_SESSION_KEY) {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(Redirect::to("/auth/login").into_response()),
     };
 
-    revoke_tokens_for_user_and_client(&state.pool, &user_id, &form.client_id)
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let client_id = match form.client_id.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/security").into_response()),
+    };
+
+    revoke_tokens_for_user_and_client(&state.pool, user_id, client_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 

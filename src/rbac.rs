@@ -2,21 +2,23 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use sqlx::SqlitePool;
+use sqlx::PgPool;
+use uuid::Uuid;
 
+// internal
 use crate::error::AppError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RoleInfo {
-    pub id:          String,
+    pub id:          Uuid,
     pub name:        String,
     pub permissions: Vec<String>,
 }
 
 #[derive(Debug, Default)]
 struct Inner {
-    by_id:   HashMap<String, RoleInfo>,
-    by_name: HashMap<String, String>,
+    by_id:   HashMap<Uuid, RoleInfo>,
+    by_name: HashMap<String, Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,12 +34,12 @@ impl RoleCache {
         inner.by_id.clear();
         inner.by_name.clear();
         for role in roles {
-            inner.by_name.insert(role.name.clone(), role.id.clone());
-            inner.by_id.insert(role.id.clone(), role);
+            inner.by_name.insert(role.name.clone(), role.id);
+            inner.by_id.insert(role.id, role);
         }
     }
 
-    pub fn has_by_id(&self, role_id: &str, permission: &str) -> bool {
+    pub fn has_by_id(&self, role_id: &Uuid, permission: &str) -> bool {
         self.0
             .read()
             .unwrap()
@@ -47,15 +49,15 @@ impl RoleCache {
             .unwrap_or(false)
     }
 
-    pub fn id_for_name(&self, name: &str) -> Option<String> {
-        self.0.read().unwrap().by_name.get(name).cloned()
+    pub fn id_for_name(&self, name: &str) -> Option<Uuid> {
+        self.0.read().unwrap().by_name.get(name).copied()
     }
 
-    pub fn name_for_id(&self, id: &str) -> Option<String> {
+    pub fn name_for_id(&self, id: &Uuid) -> Option<String> {
         self.0.read().unwrap().by_id.get(id).map(|r| r.name.clone())
     }
 
-    pub fn permissions_for_id(&self, role_id: &str) -> Vec<String> {
+    pub fn permissions_for_id(&self, role_id: &Uuid) -> Vec<String> {
         self.0
             .read()
             .unwrap()
@@ -65,15 +67,15 @@ impl RoleCache {
             .unwrap_or_default()
     }
 
-    pub async fn reload(&self, pool: &SqlitePool) -> Result<(), AppError> {
+    pub async fn reload(&self, pool: &PgPool) -> Result<(), AppError> {
         let rows = load_from_db(pool).await?;
         self.populate(rows);
         Ok(())
     }
 }
 
-pub async fn load_from_db(pool: &SqlitePool) -> Result<Vec<RoleInfo>, AppError> {
-    let roles = sqlx::query_as::<_, (String, String)>(
+pub async fn load_from_db(pool: &PgPool) -> Result<Vec<RoleInfo>, AppError> {
+    let roles = sqlx::query_as::<_, (Uuid, String)>(
         "SELECT id, name FROM roles ORDER BY name ASC",
     )
     .fetch_all(pool)
@@ -91,9 +93,9 @@ pub async fn load_from_db(pool: &SqlitePool) -> Result<Vec<RoleInfo>, AppError> 
             "SELECT p.name
              FROM permissions p
              INNER JOIN role_permissions rp ON rp.permission_id = p.id
-             WHERE rp.role_id = ?",
+             WHERE rp.role_id = $1",
         )
-        .bind(&role_id)
+        .bind(role_id)
         .fetch_all(pool)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;

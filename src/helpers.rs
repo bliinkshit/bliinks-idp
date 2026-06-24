@@ -1,7 +1,8 @@
 // src/helpers.rs
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use tera::Context;
 use axum::http::HeaderMap;
+use uuid::Uuid;
 
 // internal
 use crate::{
@@ -11,21 +12,27 @@ use crate::{
     session::Session,
 };
 
-pub async fn get_user_ctx(pool: &SqlitePool, roles: &RoleCache, session: &Session, ctx: &mut Context) {
-    let Some(user_id) = session.get::<String>(USER_SESSION_KEY) else {
+pub async fn get_user_ctx(pool: &PgPool, roles: &RoleCache, session: &Session, ctx: &mut Context) {
+    let mut blank = || {
         ctx.insert("auth_username",     &Option::<String>::None);
         ctx.insert("auth_role",         &"");
         ctx.insert("auth_display_name", &Option::<String>::None);
         ctx.insert("auth_color",        &Option::<String>::None);
+    };
+
+    let Some(user_id_str) = session.get::<String>(USER_SESSION_KEY) else {
+        blank();
         return;
     };
-    let Ok(Some(user)) = get_user_by_id(pool, &user_id).await else {
-        ctx.insert("auth_username",     &Option::<String>::None);
-        ctx.insert("auth_role",         &"");
-        ctx.insert("auth_display_name", &Option::<String>::None);
-        ctx.insert("auth_color",        &Option::<String>::None);
+    let Ok(user_id) = user_id_str.parse::<Uuid>() else {
+        blank();
         return;
     };
+    let Ok(Some(user)) = get_user_by_id(pool, user_id).await else {
+        blank();
+        return;
+    };
+
     let role_name = roles.name_for_id(&user.role).unwrap_or_default();
     ctx.insert("auth_username",     &user.username);
     ctx.insert("auth_role",         &role_name);
@@ -53,7 +60,6 @@ pub fn base_url_from_headers(headers: &HeaderMap) -> String {
     format!("{}://{}", scheme, host)
 }
 
-// to be renamed: render_client_error
 #[macro_export]
 macro_rules! render_err {
     ($state:expr, $template:expr, $ctx:expr, $msg:expr, $start:expr) => {{
@@ -82,10 +88,8 @@ pub fn validate_password(password: &str, password_repeat: &str) -> Result<(), &'
     if password.len() < 6 {
         return Err("Password must be at least 6 characters.");
     }
-
     if password != password_repeat {
         return Err("Passwords do not match.");
     }
-
     Ok(())
 }

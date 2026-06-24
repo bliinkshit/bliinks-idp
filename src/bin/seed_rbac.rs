@@ -1,7 +1,5 @@
 // src/bin/seed_rbac.rs
-use std::env;
-
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
 struct Role {
@@ -71,72 +69,68 @@ const PERMISSIONS: &[Permission] = &[
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        eprintln!("usage: seed_rbac <db_path>");
-        std::process::exit(1);
-    }
+    let db_url = std::env::args().nth(1)
+        .expect("usage: seed_rbac <postgres_url>");
 
-    let db_url = format!("sqlite:{}", args[1]);
-    let pool   = SqlitePoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&db_url)
         .await?;
 
     for perm in PERMISSIONS {
         let existing: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM permissions WHERE name = ?)",
+            "SELECT EXISTS(SELECT 1 FROM permissions WHERE name = $1)",
         )
         .bind(perm.name)
         .fetch_one(&pool)
         .await?;
 
         if existing {
-            println!("permission already exists, skipping: {}", perm.name);
+            println!("permission exists, skipping: {}", perm.name);
             continue;
         }
 
-        let id = Uuid::new_v4().to_string();
+        let id = Uuid::new_v4();
         sqlx::query(
-            "INSERT INTO permissions (id, name, description) VALUES (?, ?, ?)",
+            "INSERT INTO permissions (id, name, description) VALUES ($1, $2, $3)",
         )
-        .bind(&id)
+        .bind(id)
         .bind(perm.name)
         .bind(perm.description)
         .execute(&pool)
         .await?;
 
-        println!("inserted permission: {} ({})", perm.name, id);
+        println!("inserted permission: {}", perm.name);
     }
 
     for role in ROLES {
         let existing: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM roles WHERE name = ?)",
+            "SELECT EXISTS(SELECT 1 FROM roles WHERE name = $1)",
         )
         .bind(role.name)
         .fetch_one(&pool)
         .await?;
 
         if existing {
-            println!("role already exists, skipping: {}", role.name);
+            println!("role exists, skipping: {}", role.name);
             continue;
         }
 
-        let role_id = Uuid::new_v4().to_string();
+        let role_id = Uuid::new_v4();
         sqlx::query(
-            "INSERT INTO roles (id, name, description) VALUES (?, ?, ?)",
+            "INSERT INTO roles (id, name, description) VALUES ($1, $2, $3)",
         )
-        .bind(&role_id)
+        .bind(role_id)
         .bind(role.name)
         .bind(role.description)
         .execute(&pool)
         .await?;
 
-        println!("inserted role: {} ({})", role.name, role_id);
+        println!("inserted role: {}", role.name);
 
         for perm_name in role.permissions {
-            let perm_id: Option<String> = sqlx::query_scalar(
-                "SELECT id FROM permissions WHERE name = ?",
+            let perm_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM permissions WHERE name = $1",
             )
             .bind(perm_name)
             .fetch_optional(&pool)
@@ -145,17 +139,15 @@ async fn main() -> anyhow::Result<()> {
             match perm_id {
                 Some(pid) => {
                     sqlx::query(
-                        "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
+                        "INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)",
                     )
-                    .bind(&role_id)
-                    .bind(&pid)
+                    .bind(role_id)
+                    .bind(pid)
                     .execute(&pool)
                     .await?;
                     println!("  -> granted: {}", perm_name);
                 }
-                None => {
-                    eprintln!("  -> permission not found, skipping: {}", perm_name);
-                }
+                None => eprintln!("  -> permission not found, skipping: {}", perm_name),
             }
         }
     }

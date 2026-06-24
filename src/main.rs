@@ -16,7 +16,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use std::sync::Arc;
 use tera::Tera;
 use tower_http::trace::TraceLayer;
@@ -34,7 +34,7 @@ use db::queries::delete_expired_password_resets;
 
 pub struct AppState {
     pub tera:  Tera,
-    pub pool:  SqlitePool,
+    pub pool:  PgPool,
     pub roles: RoleCache,
 }
 

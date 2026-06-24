@@ -11,10 +11,12 @@ use axum::{
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tera::Context;
+use uuid::Uuid;
 
 // internal
 use crate::{
     db::{
+        models::OAuthClient,
         oauth_queries::{
             consume_authorization_code, create_authorization_code, create_token, get_client,
             get_client_redirect_uris, get_token, revoke_token,
@@ -76,10 +78,15 @@ fn extract_client_credentials(
 }
 
 async fn verify_client(
-    pool:          &sqlx::SqlitePool,
-    client_id:     &str,
+    pool:          &sqlx::PgPool,
+    client_id_str: &str,
     client_secret: &str,
-) -> Result<crate::db::models::OAuthClient, Response> {
+) -> Result<OAuthClient, Response> {
+    let client_id = match client_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Err(oauth_error("invalid_client", "Unknown client.")),
+    };
+
     let client = match get_client(pool, client_id).await {
         Ok(Some(c)) => c,
         _           => return Err(oauth_error("invalid_client", "Unknown client.")),
@@ -138,7 +145,12 @@ pub async fn render_authorize(
         return Ok(oauth_error("unsupported_response_type", "Only 'code' is supported."));
     }
 
-    let client = get_client(&state.pool, &query.client_id)
+    let client_id = match query.client_id.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(oauth_error("invalid_client", "Unknown client.")),
+    };
+
+    let client = get_client(&state.pool, client_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -147,7 +159,7 @@ pub async fn render_authorize(
         None    => return Ok(oauth_error("invalid_client", "Unknown client.")),
     };
 
-    let allowed_uris = get_client_redirect_uris(&state.pool, &query.client_id)
+    let allowed_uris = get_client_redirect_uris(&state.pool, client_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -195,9 +207,14 @@ pub async fn handle_authorize(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<AuthorizeForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let user_id: String = match session.get(USER_SESSION_KEY) {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
     };
 
     if form.action != "approve" {
@@ -208,7 +225,12 @@ pub async fn handle_authorize(
         ));
     }
 
-    let allowed_uris = get_client_redirect_uris(&state.pool, &form.client_id)
+    let client_id = match form.client_id.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(oauth_error("invalid_client", "Unknown client.")),
+    };
+
+    let allowed_uris = get_client_redirect_uris(&state.pool, client_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -231,8 +253,8 @@ pub async fn handle_authorize(
     create_authorization_code(
         &state.pool,
         &code,
-        &form.client_id,
-        &user_id,
+        client_id,
+        user_id,
         &form.redirect_uri,
         &scopes::serialize(&scopes),
     )
@@ -285,8 +307,8 @@ pub async fn handle_token(
     };
 
     match form.grant_type.as_str() {
-        "authorization_code" => handle_token_auth_code(&state, &client.id, &form).await,
-        "refresh_token"      => handle_token_refresh(&state, &client.id, &form).await,
+        "authorization_code" => handle_token_auth_code(&state, client.id, &form).await,
+        "refresh_token"      => handle_token_refresh(&state, client.id, &form).await,
         _                    => oauth_error(
             "unsupported_grant_type",
             "Supported: authorization_code, refresh_token.",
@@ -296,7 +318,7 @@ pub async fn handle_token(
 
 async fn handle_token_auth_code(
     state:     &Arc<AppState>,
-    client_id: &str,
+    client_id: Uuid,
     form:      &TokenForm,
 ) -> Response {
     let (Some(code), Some(redirect_uri)) = (&form.code, &form.redirect_uri) else {
@@ -312,12 +334,12 @@ async fn handle_token_auth_code(
         return oauth_error("invalid_grant", "Code was not issued for this client or redirect_uri.");
     }
 
-    issue_token_pair(state, client_id, &auth_code.user_id, &auth_code.scopes).await
+    issue_token_pair(state, client_id, auth_code.user_id, &auth_code.scopes).await
 }
 
 async fn handle_token_refresh(
     state:     &Arc<AppState>,
-    client_id: &str,
+    client_id: Uuid,
     form:      &TokenForm,
 ) -> Response {
     let Some(refresh_token) = &form.refresh_token else {
@@ -337,13 +359,13 @@ async fn handle_token_refresh(
         return oauth_error("server_error", "Failed to rotate refresh token.");
     }
 
-    issue_token_pair(state, client_id, &stored.user_id, &stored.scopes).await
+    issue_token_pair(state, client_id, stored.user_id, &stored.scopes).await
 }
 
 async fn issue_token_pair(
     state:     &Arc<AppState>,
-    client_id: &str,
-    user_id:   &str,
+    client_id: Uuid,
+    user_id:   Uuid,
     scopes:    &str,
 ) -> Response {
     let (access_token,  access_hash)  = token::generate();
@@ -352,8 +374,8 @@ async fn issue_token_pair(
     let access_expiry  = token::access_token_expiry();
     let refresh_expiry = token::refresh_token_expiry();
 
-    let a = create_token(&state.pool, &access_hash,  client_id, user_id, "access",  scopes, &access_expiry).await;
-    let r = create_token(&state.pool, &refresh_hash, client_id, user_id, "refresh", scopes, &refresh_expiry).await;
+    let a = create_token(&state.pool, &access_hash,  client_id, user_id, "access",  scopes, access_expiry).await;
+    let r = create_token(&state.pool, &refresh_hash, client_id, user_id, "refresh", scopes, refresh_expiry).await;
 
     if a.is_err() || r.is_err() {
         return oauth_error("server_error", "Failed to issue tokens.");
@@ -434,7 +456,7 @@ pub async fn handle_userinfo(
         }))).into_response(),
     };
 
-    let user = match get_user_by_id(&state.pool, &stored.user_id).await {
+    let user = match get_user_by_id(&state.pool, stored.user_id).await {
         Ok(Some(u)) => u,
         _           => return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
             "error": "invalid_token",
@@ -453,7 +475,7 @@ pub async fn handle_userinfo(
     let picture = if has_profile && user.avatar_updated_at.is_some() {
         let host   = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
         let scheme = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or("http");
-        let ts     = user.avatar_updated_at.as_deref().unwrap_or("");
+        let ts     = user.avatar_updated_at.map(|t| t.timestamp_millis().to_string()).unwrap_or_default();
         Some(format!("{}://{}/avatars/{}?v={}", scheme, host, user.id, ts))
     } else {
         None
@@ -462,12 +484,12 @@ pub async fn handle_userinfo(
     let role_name = state.roles.name_for_id(&user.role).unwrap_or_default();
 
     Json(UserinfoResponse {
-        sub:          user.id,
+        sub:          user.id.to_string(),
         username:     user.username,
         display_name: if has_profile { user.display_name } else { None },
         color:        if has_profile { user.color } else { None },
         picture,
-        date_created: user.date_created,
+        date_created: user.date_created.to_rfc3339(),
         role:         role_name,
     })
     .into_response()

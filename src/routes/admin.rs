@@ -41,6 +41,7 @@ struct TemplateUser {
     id:                String,
     username:          String,
     role:              String,
+    role_id:           String,
     display_name:      Option<String>,
     color:             Option<String>,
     avatar_updated_at: Option<String>,
@@ -52,14 +53,15 @@ impl TemplateUser {
     fn from_user(user: User, roles: &RoleCache) -> Self {
         let role = roles.name_for_id(&user.role).unwrap_or_default();
         Self {
-            id:                user.id,
+            id:                user.id.to_string(),
             username:          user.username,
             role,
+            role_id:           user.role.to_string(),
             display_name:      user.display_name,
             color:             user.color,
-            avatar_updated_at: user.avatar_updated_at,
-            date_created:      user.date_created,
-            deleted_at:        user.deleted_at,
+            avatar_updated_at: user.avatar_updated_at.map(|t| t.to_rfc3339()),
+            date_created:      user.date_created.to_rfc3339(),
+            deleted_at:        user.deleted_at.map(|t| t.to_rfc3339()),
         }
     }
 }
@@ -107,9 +109,16 @@ async fn build_ctx(state: &Arc<AppState>) -> Result<Context, AppErrorResponse> {
     let all_users = get_all_users(&state.pool)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(state), e))?;
-    let clients = get_all_clients(&state.pool)
+
+    let clients_raw = get_all_clients(&state.pool)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(state), e))?;
+
+    let clients: Vec<_> = clients_raw.into_iter().map(|c| serde_json::json!({
+        "id":         c.id.to_string(),
+        "name":       c.name,
+        "created_at": c.created_at.to_rfc3339(),
+    })).collect();
 
     let deleted_id = state.roles.id_for_name("deleted").unwrap_or_default();
     let banned_id  = state.roles.id_for_name("banned").unwrap_or_default();
@@ -121,7 +130,7 @@ async fn build_ctx(state: &Arc<AppState>) -> Result<Context, AppErrorResponse> {
     let mut deleted: Vec<TemplateUser> = Vec::new();
 
     for user in all_users {
-        let role_id = user.role.clone();
+        let role_id = user.role;
         let tu = TemplateUser::from_user(user, &state.roles);
         if role_id == deleted_id {
             deleted.push(tu);
@@ -144,7 +153,7 @@ async fn build_ctx(state: &Arc<AppState>) -> Result<Context, AppErrorResponse> {
     Ok(ctx)
 }
 
-fn resolve_role_id(state: &Arc<AppState>, role_name: &str) -> Option<String> {
+fn resolve_role_id(state: &Arc<AppState>, role_name: &str) -> Option<Uuid> {
     let allowed = ["pending", "member", "admin", "banned"];
     if !allowed.contains(&role_name) {
         return None;
@@ -169,6 +178,18 @@ pub async fn handle_set_role(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<SetRoleForm>,
 ) -> Result<Response, AppErrorResponse> {
+    let user_id = match form.user_id.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => {
+            let mut ctx = build_ctx(&state).await?;
+            get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
+            ctx.insert("error", "Invalid user ID.");
+            return render(&state.tera, "admin.html", &mut ctx, Instant::now())
+                .map(|html| Html(html).into_response())
+                .map_err(|e| AppErrorResponse(Arc::clone(&state), e));
+        }
+    };
+
     let role_id = match resolve_role_id(&state, &form.role) {
         Some(id) => id,
         None     => {
@@ -181,12 +202,12 @@ pub async fn handle_set_role(
         }
     };
 
-    set_user_role(&state.pool, &form.user_id, &role_id)
+    set_user_role(&state.pool, user_id, role_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     if matches!(form.role.as_str(), "banned" | "pending") {
-        delete_sessions_for_user(&state.pool, &form.user_id)
+        delete_sessions_for_user(&state.pool, user_id)
             .await
             .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
     }
@@ -205,8 +226,11 @@ pub async fn handle_issue_reset(
     headers:      HeaderMap,
     Form(form):   Form<ResetForm>,
 ) -> Result<Response, AppErrorResponse> {
+    let user_id = form.user_id.parse::<Uuid>()
+        .map_err(|_| AppErrorResponse(Arc::clone(&state), AppError::BadRequest("Invalid user ID.".into())))?;
+
     let base_url  = base_url_from_request(&headers);
-    let reset_url = issue_password_reset(&state.pool, &form.user_id, &base_url)
+    let reset_url = issue_password_reset(&state.pool, user_id, &base_url)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -223,7 +247,7 @@ pub async fn handle_create_client(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<CreateClientForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let id     = Uuid::new_v4().to_string();
+    let id     = Uuid::new_v4();
     let secret = Uuid::new_v4().to_string();
 
     let salt = SaltString::generate(&mut OsRng);
@@ -232,17 +256,17 @@ pub async fn handle_create_client(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
         .to_string();
 
-    create_client(&state.pool, &id, &hash, form.name.trim())
+    create_client(&state.pool, id, &hash, form.name.trim())
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    add_redirect_uri(&state.pool, &id, form.redirect_uri.trim())
+    add_redirect_uri(&state.pool, id, form.redirect_uri.trim())
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
     let mut ctx = build_ctx(&state).await?;
     get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
-    ctx.insert("new_client_id",     &id);
+    ctx.insert("new_client_id",     &id.to_string());
     ctx.insert("new_client_secret", &secret);
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
@@ -254,7 +278,10 @@ pub async fn handle_delete_client(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<DeleteClientForm>,
 ) -> Result<Response, AppErrorResponse> {
-    delete_client(&state.pool, &form.client_id)
+    let client_id = form.client_id.parse::<Uuid>()
+        .map_err(|_| AppErrorResponse(Arc::clone(&state), AppError::BadRequest("Invalid client ID.".into())))?;
+
+    delete_client(&state.pool, client_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -271,28 +298,31 @@ pub async fn handle_force_delete(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<ForceDeleteForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let secure = !crate::cfg::CONFIG.general.dev;
+    let secure  = !crate::cfg::CONFIG.general.dev;
+    let user_id = form.user_id.parse::<Uuid>()
+        .map_err(|_| AppErrorResponse(Arc::clone(&state), AppError::BadRequest("Invalid user ID.".into())))?;
 
     let deleted_role_id = state.roles.id_for_name("deleted")
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("RBAC: deleted role not found in cache.".into())))?;
 
-    delete_user(&state.pool, &form.user_id, &deleted_role_id)
+    delete_user(&state.pool, user_id, deleted_role_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    delete_sessions_for_user(&state.pool, &form.user_id)
+    delete_sessions_for_user(&state.pool, user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    revoke_all_tokens_for_user(&state.pool, &form.user_id)
+    revoke_all_tokens_for_user(&state.pool, user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    let _ = fs::remove_file(format!("{}/{}.gif", AVATAR_DIR, form.user_id)).await;
+    let _ = fs::remove_file(format!("{}/{}.gif", AVATAR_DIR, user_id)).await;
 
     let self_delete = session
         .get::<String>(crate::routes::auth::USER_SESSION_KEY)
-        .map(|id| id == form.user_id)
+        .and_then(|id| id.parse::<Uuid>().ok())
+        .map(|id| id == user_id)
         .unwrap_or(false);
 
     if self_delete {

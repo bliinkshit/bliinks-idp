@@ -147,7 +147,7 @@ pub async fn handle_login(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<LoginForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let start = Instant::now();
+    let start    = Instant::now();
     let secure   = !crate::cfg::CONFIG.general.dev;
     let remember = form.remember.as_deref() == Some("remember");
     let mut ctx  = Context::new();
@@ -196,10 +196,11 @@ pub async fn handle_login(
     }
 
     let next: Option<String> = session.get(OAUTH_NEXT_KEY);
+    let user_id = user.id;
 
     session.remember = remember;
-    session.user_id  = Some(user.id.clone());
-    session.insert(USER_SESSION_KEY, &user.id);
+    session.user_id  = Some(user_id.clone());
+    session.insert(USER_SESSION_KEY, &user_id);
     session.remove(OAUTH_NEXT_KEY);
     session.regenerate().await;
 
@@ -218,7 +219,7 @@ pub async fn handle_register(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<RegisterForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let start = Instant::now();
+    let start   = Instant::now();
     let secure  = !crate::cfg::CONFIG.general.dev;
     let mut ctx = Context::new();
     get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
@@ -256,10 +257,9 @@ pub async fn handle_register(
     .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?
     .map_err(|e| AppErrorResponse(Arc::clone(&state), AppError::Internal(e.to_string())))?;
 
-    let id      = Uuid::new_v4().to_string();
-    let created = chrono::Utc::now().to_rfc3339();
+    let id = Uuid::new_v4();
 
-    let inserted = create_user(&state.pool, &id, username, &hash, &pending_role_id, &created)
+    let inserted = create_user(&state.pool, id, username, &hash, pending_role_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -285,12 +285,11 @@ pub async fn handle_reset(
     State(state): State<Arc<AppState>>,
     Form(form):   Form<ResetForm>,
 ) -> Result<Response, AppErrorResponse> {
-    let start = Instant::now();
+    let start      = Instant::now();
     let secure     = !crate::cfg::CONFIG.general.dev;
     let token_hash = hash_input(&form.token);
     let mut ctx    = Context::new();
     ctx.insert("token", &form.token);
-
     get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     let reset = get_password_reset(&state.pool, &token_hash)
@@ -306,7 +305,7 @@ pub async fn handle_reset(
         render_err!(state, "auth/reset.html", ctx, msg, start);
     }
 
-    let user = get_user_by_id(&state.pool, &reset.user_id)
+    let user = get_user_by_id(&state.pool, reset.user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?
         .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("User not found".into())))?;
@@ -326,15 +325,15 @@ pub async fn handle_reset(
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    update_user_password(&state.pool, &user.id, &hash)
+    update_user_password(&state.pool, user.id, &hash)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    delete_sessions_for_user(&state.pool, &user.id)
+    delete_sessions_for_user(&state.pool, user.id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
-    revoke_all_tokens_for_user(&state.pool, &user.id)
+    revoke_all_tokens_for_user(&state.pool, user.id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 

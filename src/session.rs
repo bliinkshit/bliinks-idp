@@ -5,43 +5,46 @@ use axum::{
     response::{AppendHeaders, IntoResponse, Response},
 };
 use serde_json::Value;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use std::collections::HashMap;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 pub const COOKIE_NAME: &str = "sid";
 const REMEMBER_COOKIE_NAME: &str = "remember";
-const SESSION_TTL_SECS:    i64 = 2  * 3600;
-const REMEMBER_TTL_SECS:   i64 = 30 * 24 * 3600;
+const SESSION_TTL_SECS:          i64 = 2  * 3600;
+const REMEMBER_TTL_SECS:         i64 = 30 * 24 * 3600;
 const REMEMBER_REFRESH_THRESHOLD: f64 = 0.8;
-
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
 
 #[derive(Debug, Clone)]
 pub struct Session {
     pub id:       String,
     pub data:     HashMap<String, Value>,
     pub remember: bool,
-    pub user_id:  Option<String>,
-    pool:         SqlitePool,
+    pub user_id:  Option<Uuid>,
+    pool:         PgPool,
     is_new:       bool,
     dirty:        bool,
 }
 
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
 impl Session {
     pub async fn load_or_create(
-        pool:     &SqlitePool,
+        pool:     &PgPool,
         sid:      Option<&str>,
         remember: bool,
     ) -> Self {
         if let Some(id) = sid {
-            if let Ok(Some(row)) = sqlx::query_as::<_, (String, String, Option<String>, i64)>(
-                "SELECT id, data, user_id, expires_at FROM sessions WHERE id = ? AND expires_at > ?",
+            if let Ok(Some(row)) = sqlx::query_as::<_, (String, String, Option<Uuid>, i64)>(
+                "SELECT id, data, user_id, expires_at
+                 FROM sessions
+                 WHERE id = $1 AND expires_at > $2"
             )
             .bind(id)
             .bind(now_unix())
@@ -50,6 +53,8 @@ impl Session {
             {
                 let data = serde_json::from_str::<HashMap<String, Value>>(&row.1)
                     .unwrap_or_default();
+
+                info!("loaded session {}", row.0);
 
                 let mut session = Self {
                     id:      row.0,
@@ -62,11 +67,13 @@ impl Session {
                 };
 
                 if remember {
-                    let expires_at  = row.3;
-                    let now         = now_unix();
-                    let threshold   = (REMEMBER_TTL_SECS as f64 * REMEMBER_REFRESH_THRESHOLD) as i64;
-                    let remaining   = expires_at - now;
-                    if remaining < REMEMBER_TTL_SECS - threshold {
+                    let expires_at = row.3;
+                    let remaining  = expires_at - now_unix();
+
+                    let refresh_when_less_than =
+                        (REMEMBER_TTL_SECS as f64 * REMEMBER_REFRESH_THRESHOLD) as i64;
+
+                    if remaining < refresh_when_less_than {
                         session.dirty = true;
                         session.save().await;
                     }
@@ -76,14 +83,18 @@ impl Session {
             }
         }
 
+        let id = Uuid::new_v4().to_string();
+
+        info!("creating new session {}", id);
+
         Self {
-            id:      Uuid::new_v4().to_string(),
-            data:    HashMap::new(),
-            remember: false,
-            user_id: None,
-            pool:    pool.clone(),
-            is_new:  true,
-            dirty:   false,
+            id,
+            data:     HashMap::new(),
+            remember,
+            user_id:  None,
+            pool:     pool.clone(),
+            is_new:   true,
+            dirty:    false,
         }
     }
 
@@ -114,20 +125,30 @@ impl Session {
         let data    = serde_json::to_string(&self.data).unwrap_or_else(|_| "{}".into());
         let expires = now_unix() + secs;
 
-        let _ = sqlx::query(
+        info!(
+            "saving session {} remember={} expires={}",
+            self.id,
+            self.remember,
+            expires
+        );
+
+        if let Err(e) = sqlx::query(
             "INSERT INTO sessions (id, data, user_id, expires_at)
-             VALUES (?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET
-                data       = excluded.data,
-                user_id    = excluded.user_id,
-                expires_at = excluded.expires_at",
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (id) DO UPDATE SET
+                data       = EXCLUDED.data,
+                user_id    = EXCLUDED.user_id,
+                expires_at = EXCLUDED.expires_at",
         )
         .bind(&self.id)
         .bind(&data)
         .bind(&self.user_id)
-        .bind(&expires)
+        .bind(expires)
         .execute(&self.pool)
-        .await;
+        .await
+        {
+            warn!("failed to save session {}: {}", self.id, e);
+        }
     }
 
     pub async fn regenerate(&mut self) {
@@ -136,19 +157,25 @@ impl Session {
         self.is_new = true;
         self.dirty  = true;
 
-        let _ = sqlx::query("DELETE FROM sessions WHERE id = ?")
+        if let Err(e) = sqlx::query("DELETE FROM sessions WHERE id = $1")
             .bind(&old_id)
             .execute(&self.pool)
-            .await;
+            .await
+        {
+            warn!("failed to delete old session {}: {}", old_id, e);
+        }
 
         self.save().await;
     }
 
     pub async fn destroy(&self) {
-        let _ = sqlx::query("DELETE FROM sessions WHERE id = ?")
+        if let Err(e) = sqlx::query("DELETE FROM sessions WHERE id = $1")
             .bind(&self.id)
             .execute(&self.pool)
-            .await;
+            .await
+        {
+            warn!("failed to destroy session {}: {}", self.id, e);
+        }
     }
 
     pub fn cookie_header(&self, secure: bool) -> HeaderValue {
@@ -191,11 +218,14 @@ pub fn clear_cookies(secure: bool) -> AppendHeaders<[(header::HeaderName, Header
     ])
 }
 
-pub async fn delete_expired(pool: &SqlitePool) {
-    let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < ?")
+pub async fn delete_expired(pool: &PgPool) {
+    if let Err(e) = sqlx::query("DELETE FROM sessions WHERE expires_at < $1")
         .bind(now_unix())
         .execute(pool)
-        .await;
+        .await
+    {
+        warn!("failed to delete expired sessions: {}", e);
+    }
 }
 
 fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -233,7 +263,7 @@ where
         Box::pin(async move {
             let pool = parts
                 .extensions
-                .get::<SqlitePool>()
+                .get::<PgPool>()
                 .cloned()
                 .ok_or(SessionRejection)?;
 

@@ -32,11 +32,11 @@ tower = { version = "0.5", features = ["util"] }
 yaptcha = "0.1.0"
 base64 = "0.22"
 urlencoding = "2"
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "migrate"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "macros", "migrate", "uuid", "chrono"] }
 argon2 = "0.5"
 sha2 = "0.10"
 hex = "0.4"
-uuid = { version = "1", features = ["v4"] }
-chrono = "0.4"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 gif   = "0.13"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }

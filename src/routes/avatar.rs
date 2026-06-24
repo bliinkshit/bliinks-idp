@@ -8,6 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use tokio::fs;
+use uuid::Uuid;
 
 // internal
 use crate::{
@@ -18,11 +19,16 @@ use crate::{
 pub const AVATAR_DIR: &str = "uploads/avatars";
 
 pub async fn handle_serve(
-    Path(user_id): Path<String>,
-    State(state):  State<Arc<AppState>>,
-    headers:       HeaderMap,
+    Path(user_id_str): Path<String>,
+    State(state):      State<Arc<AppState>>,
+    headers:           HeaderMap,
 ) -> Response {
-    let user = match get_user_by_id(&state.pool, &user_id).await {
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let user = match get_user_by_id(&state.pool, user_id).await {
         Ok(Some(u)) => u,
         _           => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -32,7 +38,7 @@ pub async fn handle_serve(
         None     => return StatusCode::NOT_FOUND.into_response(),
     };
 
-    let etag = format!("\"{}\"", updated_at);
+    let etag = format!("\"{}\"", updated_at.timestamp_millis());
 
     if let Some(inm) = headers.get(header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()) {
         if inm == etag {

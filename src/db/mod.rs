@@ -3,31 +3,19 @@ pub mod models;
 pub mod queries;
 pub mod oauth_queries;
 
-use sqlx::{sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous, SqlitePoolOptions}, SqlitePool};
+use sqlx::{postgres::{PgConnectOptions, PgPoolOptions}, PgPool};
 use sqlx::migrate::Migrate;
 use tracing::info;
 use std::str::FromStr;
 
+// internal
 use crate::error::AppError;
 
-pub async fn init_pool(url: &str) -> Result<SqlitePool, AppError> {
-    let opts = SqliteConnectOptions::from_str(url)
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal)
-        .busy_timeout(std::time::Duration::from_secs(5))
-        .foreign_keys(true)
-        .create_if_missing(true);
+pub async fn init_pool(url: &str) -> Result<PgPool, AppError> {
+    let opts = PgConnectOptions::from_str(url)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    if let Some(path) = opts.get_filename().parent() {
-        if !path.as_os_str().is_empty() {
-            tokio::fs::create_dir_all(path)
-                .await
-                .map_err(|e| AppError::Internal(format!("failed to create db directory: {e}")))?;
-        }
-    }
-
-    let pool = SqlitePoolOptions::new()
+    let pool = PgPoolOptions::new()
         .max_connections(10)
         .idle_timeout(std::time::Duration::from_secs(600))
         .connect_with(opts)

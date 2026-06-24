@@ -13,6 +13,7 @@ use image::{imageops::FilterType, RgbaImage};
 use serde::Deserialize;
 use tera::Context;
 use tokio::fs;
+use uuid::Uuid;
 
 // internal
 use crate::{
@@ -40,7 +41,7 @@ fn is_valid_hex_color(s: &str) -> bool {
 
 async fn settings_ctx(
     state:   &Arc<AppState>,
-    user_id: &str,
+    user_id: Uuid,
 ) -> Result<(Context, User), AppError> {
     let user = get_user_by_id(&state.pool, user_id)
         .await?
@@ -48,7 +49,7 @@ async fn settings_ctx(
 
     let mut ctx = Context::new();
     ctx.insert("title",        "Settings");
-    ctx.insert("id",           &user.id);
+    ctx.insert("id",           &user.id.to_string());
     ctx.insert("avatar",       &user.avatar_updated_at.is_some());
     ctx.insert("username",     &user.username);
     ctx.insert("display_name", &user.display_name);
@@ -64,12 +65,17 @@ pub async fn render_settings(
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
 
-    let user_id: String = match session.get(USER_SESSION_KEY) {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
     };
 
-    let (mut ctx, _) = match settings_ctx(&state, &user_id).await {
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
+    };
+
+    let (mut ctx, _) = match settings_ctx(&state, user_id).await {
         Ok(v)  => v,
         Err(e) => return Ok(render_error(State(Arc::clone(&state)), session, e).await.into_response()),
     };
@@ -92,12 +98,17 @@ pub async fn handle_profile(
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
 
-    let user_id: String = match session.get(USER_SESSION_KEY) {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
     };
 
-    let (mut ctx, user) = match settings_ctx(&state, &user_id).await {
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
+    };
+
+    let (mut ctx, user) = match settings_ctx(&state, user_id).await {
         Ok(v)  => v,
         Err(e) => return Ok(render_error(State(Arc::clone(&state)), session, e).await.into_response()),
     };
@@ -109,7 +120,7 @@ pub async fn handle_profile(
 
     let new_name: Option<&str> = if name.is_empty() { None } else { Some(name) };
     if new_name != user.display_name.as_deref() {
-        render_server_error!(update_user_display_name(&state.pool, &user_id, new_name).await, state, session);
+        render_server_error!(update_user_display_name(&state.pool, user_id, new_name).await, state, session);
     }
 
     let color = form.color.trim();
@@ -122,7 +133,7 @@ pub async fn handle_profile(
         Some(format!("#{}", color.strip_prefix('#').unwrap_or(color).to_lowercase()))
     };
     if new_color.as_deref() != user.color.as_deref() {
-        render_server_error!(update_user_color(&state.pool, &user_id, new_color.as_deref()).await, state, session);
+        render_server_error!(update_user_color(&state.pool, user_id, new_color.as_deref()).await, state, session);
     }
 
     ctx.insert("display_name", &new_name);
@@ -141,12 +152,17 @@ pub async fn handle_upload(
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
 
-    let user_id: String = match session.get(USER_SESSION_KEY) {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
         Some(id) => id,
         None     => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
     };
 
-    let (mut ctx, _) = match settings_ctx(&state, &user_id).await {
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(axum::response::Redirect::to("/auth/login").into_response()),
+    };
+
+    let (mut ctx, _) = match settings_ctx(&state, user_id).await {
         Ok(v)  => v,
         Err(e) => return Ok(render_error(State(Arc::clone(&state)), session, e).await.into_response()),
     };
@@ -200,8 +216,8 @@ pub async fn handle_upload(
     render_server_error!(fs::write(&tmp_path, &gif_bytes).await, state, session);
     render_server_error!(fs::rename(&tmp_path, &final_path).await, state, session);
 
-    let ts = Utc::now().to_rfc3339();
-    render_server_error!(set_avatar_updated_at(&state.pool, &user_id, &ts).await, state, session);
+    let ts = Utc::now();
+    render_server_error!(set_avatar_updated_at(&state.pool, user_id, ts).await, state, session);
 
     ctx.insert("avatar",  &true);
     ctx.insert("success", "Avatar updated.");
