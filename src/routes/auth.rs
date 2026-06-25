@@ -19,8 +19,9 @@ use uuid::Uuid;
 // internal
 use crate::{
     db::queries::{
-        create_user, delete_sessions_for_user, get_password_reset,
-        get_user_by_id, get_user_by_username, mark_password_reset_used, update_user_password,
+        create_user, delete_sessions_for_user, get_invite_by_code, get_password_reset,
+        get_user_by_id, get_user_by_username, mark_password_reset_used, redeem_invite,
+        update_user_password,
     },
     db::oauth_queries::revoke_all_tokens_for_user,
     error::{AppError, AppErrorResponse},
@@ -50,6 +51,7 @@ pub struct RegisterForm {
     #[serde(rename = "password-repeat")]
     pub password_repeat: String,
     pub captcha:         String,
+    pub invite:          Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -101,12 +103,21 @@ pub async fn render_login(
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
 }
 
+#[derive(Deserialize)]
+pub struct InviteQuery {
+    pub invite: Option<String>,
+}
+
 pub async fn render_register(
     session:      Session,
     State(state): State<Arc<AppState>>,
+    Query(query): Query<InviteQuery>,
 ) -> Result<Html<String>, AppErrorResponse> {
-    let start = Instant::now();
+    let start   = Instant::now();
     let mut ctx = Context::new();
+    if let Some(code) = query.invite {
+        ctx.insert("invite", &code);
+    }
     get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
     render(&state.tera, "auth/register.html", &mut ctx, start)
         .map(Html)
@@ -243,8 +254,26 @@ pub async fn handle_register(
         render_err!(state, "auth/register.html", ctx, msg, start);
     }
 
-    let pending_role_id = state.roles.id_for_name("pending")
-        .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("RBAC: pending role not found in cache.".into())))?;
+    let invite_code = form.invite.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty());
+
+    let (role_id, used_invite) = if let Some(code) = invite_code {
+        let invite = get_invite_by_code(&state.pool, code)
+            .await
+            .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+        match invite {
+            Some(inv) => {
+                let member_role_id = state.roles.id_for_name("member")
+                    .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("RBAC: member role not found in cache.".into())))?;
+                (member_role_id, Some(inv.code))
+            }
+            None => render_err!(state, "auth/register.html", ctx, "Invalid or already-used invite code.", start),
+        }
+    } else {
+        let pending_role_id = state.roles.id_for_name("pending")
+            .ok_or_else(|| AppErrorResponse(Arc::clone(&state), AppError::Internal("RBAC: pending role not found in cache.".into())))?;
+        (pending_role_id, None)
+    };
 
     let password = form.password.clone();
     let hash = tokio::task::spawn_blocking(move || {
@@ -259,7 +288,7 @@ pub async fn handle_register(
 
     let id = Uuid::new_v4();
 
-    let inserted = create_user(&state.pool, id, username, &hash, pending_role_id)
+    let inserted = create_user(&state.pool, id, username, &hash, role_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 
@@ -267,10 +296,16 @@ pub async fn handle_register(
         render_err!(state, "auth/register.html", ctx, "That username is already taken.", start);
     }
 
-    ctx.insert(
-        "success",
-        "Account created! You'll need to wait for an admin to approve you before logging in.",
-    );
+    if let Some(code) = used_invite {
+        let _ = redeem_invite(&state.pool, &code, id).await;
+    }
+
+    let success_msg = if role_id == state.roles.id_for_name("member").unwrap_or_default() {
+        "Account created! You can now log in."
+    } else {
+        "Account created! You'll need to wait for an admin to approve you before logging in."
+    };
+    ctx.insert("success", success_msg);
     let html = render(&state.tera, "auth/register.html", &mut ctx, start)
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 

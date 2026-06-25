@@ -29,6 +29,28 @@
     <p>No connected apps.</p>
     {% endif %}
 
+    <h2>Invite Links</h2>
+    <form action="/security/invite" method="POST">
+        <input type="submit" value="Generate Invite Link">
+    </form>
+    {% if invites %}
+    <br>
+    <table class="table" border="1" cellpadding="4" cellspacing="0">
+        <tr>
+            <th>Link</th>
+            <th>Status</th>
+            <th>Created</th>
+        </tr>
+        {% for inv in invites %}
+        <tr>
+            <td>{% if not inv.used %}<a href="{{ inv.url }}">{{ inv.url }}</a>{% else %}<span>{{ inv.url }}</span>{% endif %}</td>
+            <td>{% if inv.used %}Used{% else %}Pending{% endif %}</td>
+            <td>{{ inv.created_at }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
     <h2>Reset Password</h2>
     {% if reset_url %}<p>Your reset link (valid for 1 hour): <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
     <form action="/security/reset" method="POST">

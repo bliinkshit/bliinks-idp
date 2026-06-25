@@ -4,7 +4,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use super::models::{PasswordReset, User};
+use super::models::{Invite, PasswordReset, User};
 
 pub async fn create_user(
     pool:     &PgPool,
@@ -243,4 +243,67 @@ pub async fn delete_user(
     .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(())
+}
+
+pub async fn create_invite(
+    pool:      &PgPool,
+    id:        Uuid,
+    code:      &str,
+    issuer_id: Uuid,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO invites (id, code, issuer_id) VALUES ($1, $2, $3)",
+    )
+    .bind(id)
+    .bind(code)
+    .bind(issuer_id)
+    .execute(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(())
+}
+
+pub async fn get_invite_by_code(
+    pool: &PgPool,
+    code: &str,
+) -> Result<Option<Invite>, AppError> {
+    sqlx::query_as::<_, Invite>(
+        "SELECT id, code, issuer_id, recipient_id, created_at
+         FROM invites WHERE code = $1 AND recipient_id IS NULL",
+    )
+    .bind(code)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))
+}
+
+pub async fn redeem_invite(
+    pool:         &PgPool,
+    code:         &str,
+    recipient_id: Uuid,
+) -> Result<bool, AppError> {
+    let result = sqlx::query(
+        "UPDATE invites SET recipient_id = $1
+         WHERE code = $2 AND recipient_id IS NULL",
+    )
+    .bind(recipient_id)
+    .bind(code)
+    .execute(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(result.rows_affected() > 0)
+}
+
+pub async fn get_invites_by_issuer(
+    pool:      &PgPool,
+    issuer_id: Uuid,
+) -> Result<Vec<Invite>, AppError> {
+    sqlx::query_as::<_, Invite>(
+        "SELECT id, code, issuer_id, recipient_id, created_at
+         FROM invites WHERE issuer_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(issuer_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))
 }

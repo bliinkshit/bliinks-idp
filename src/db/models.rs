@@ -55,6 +55,15 @@ pub struct OAuthToken {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct Invite {
+    pub id:           Uuid,
+    pub code:         String,
+    pub issuer_id:    Uuid,
+    pub recipient_id: Option<Uuid>,
+    pub created_at:   DateTime<Utc>,
+}
+
 impl User {
     pub fn is_deleted(&self) -> bool {
         self.deleted_at.is_some()

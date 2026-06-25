@@ -102,6 +102,7 @@ async fn main() -> Result<(), AppError> {
         .route("/security/reset",         post(routes::security::handle_reset))
         .route("/security/delete",        post(routes::security::handle_delete_account))
         .route("/security/revoke-client", post(routes::security::handle_revoke_client))
+        .route("/security/invite",        post(routes::security::handle_create_invite))
         .layer(axum_middleware::from_fn(middleware::require_auth));
 
     let oauth_routes = Router::new()

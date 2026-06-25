@@ -17,7 +17,10 @@ use uuid::Uuid;
 use crate::{
     db::{
         oauth_queries::{get_connected_clients_for_user, revoke_all_tokens_for_user, revoke_tokens_for_user_and_client},
-        queries::{delete_sessions_for_user, delete_user, get_user_by_id, issue_password_reset},
+        queries::{
+            create_invite, delete_sessions_for_user, delete_user,
+            get_invites_by_issuer, get_user_by_id, issue_password_reset,
+        },
     },
     error::{AppError, AppErrorResponse},
     helpers::{get_user_ctx, base_url_from_headers, insert_user_ctx},
@@ -31,6 +34,7 @@ use crate::{
 pub async fn render_security(
     session:      Session,
     State(state): State<Arc<AppState>>,
+    headers:      HeaderMap,
 ) -> Result<Response, AppErrorResponse> {
     let start = Instant::now();
 
@@ -53,9 +57,21 @@ pub async fn render_security(
         "name": c.name,
     })).collect();
 
+    let invites_raw = get_invites_by_issuer(&state.pool, user_id)
+        .await
+        .unwrap_or_default();
+
+    let base_url = base_url_from_headers(&headers);
+    let invites: Vec<_> = invites_raw.iter().map(|inv| serde_json::json!({
+        "url":        format!("{}/auth/register?invite={}", base_url, inv.code),
+        "used":       inv.recipient_id.is_some(),
+        "created_at": inv.created_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+    })).collect();
+
     let mut ctx = Context::new();
-    ctx.insert("title", "Security");
+    ctx.insert("title",             "Security");
     ctx.insert("connected_clients", &clients);
+    ctx.insert("invites",           &invites);
     get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 
     render(&state.tera, "security.html", &mut ctx, start)
@@ -219,6 +235,36 @@ pub async fn handle_revoke_client(
     };
 
     revoke_tokens_for_user_and_client(&state.pool, user_id, client_id)
+        .await
+        .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+    Ok(Redirect::to("/security").into_response())
+}
+
+pub async fn handle_create_invite(
+    session:      Session,
+    State(state): State<Arc<AppState>>,
+    headers:      HeaderMap,
+) -> Result<Response, AppErrorResponse> {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
+        Some(id) => id,
+        None     => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let code = {
+        use rand::RngCore;
+        use argon2::password_hash::rand_core::OsRng;
+        let mut raw = [0u8; 16];
+        OsRng.fill_bytes(&mut raw);
+        hex::encode(raw)
+    };
+
+    create_invite(&state.pool, Uuid::new_v4(), &code, user_id)
         .await
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
 

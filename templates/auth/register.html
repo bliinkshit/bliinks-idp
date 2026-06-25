@@ -16,10 +16,14 @@
 		<input type="password" name="password-repeat" id="password-repeat" placeholder="Repeat password"><br>
 		
 		<img id="captcha_image" src="/captcha" alt="Captcha"><br>
-		<a href="/auth/register" class="captcha__button" id="captcha_refresh">
+		<a href="/auth/register{% if invite %}?invite={{ invite }}{% endif %}" class="captcha__button" id="captcha_refresh">
 		    Refresh
 		</a><br>
 		<input type="text" name="captcha" id="captcha" placeholder="CAPTCHA"><br>
+
+		{% if invite %}
+		<input type="hidden" name="invite" value="{{ invite }}">
+		{% endif %}
 
 		<input type="submit" name="submit" value="Submit">
 	</form>
