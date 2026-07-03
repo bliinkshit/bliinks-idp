@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_display_name | default(value=profile_username) }} (@{{ profile_username }}){% endblock %}
+
+{% block content %}
+<div class="container">
+    <table class="table-layout">
+        <tbody>
+            <tr>
+                <td>
+                    {% if profile_avatar %}
+                        <img width="128px" height="128px" src="/avatars/{{ profile_id }}">
+                    {% endif %}
+                </td>
+                <td>
+                    <h1>
+                        <span {% if profile_color %}style="color:{{ profile_color }};"{% endif %}>
+                            {{ profile_display_name | default(value=profile_username) }}
+                        </span>
+                    </h1>
+                    <p class="text-small">@{{ profile_username }}</p>
+                    <p class="text-small">Joined {{ profile_date_created | date(format="%b %d %Y") }}</p>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

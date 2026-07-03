@@ -9,3 +9,4 @@ pub mod oauth;
 pub mod settings;
 pub mod avatar;
 pub mod security;
+pub mod user;
