@@ -55,7 +55,6 @@
         <tr>
             <th>Avatar</th>
             <th>Username</th>
-            <th>ID</th>
             <th>Role</th>
             <th>Created</th>
             <th>Actions</th>
@@ -63,8 +62,10 @@
         {% for user in active %}
         <tr>
             <td>{% if user.avatar_updated_at %}<img width="50px" height="50px" src="/avatars/{{ user.id }}">{% else %}None{% endif %}</td>
-            <td><span {% if user.color %}style="color:{{user.color}};"{% endif %}>{{ user.username }}</span></td>
-            <td>{{ user.id }}</td>
+            <td>
+                <a href="/@{{ user.username }}" {% if user.color %}style="color:{{user.color}};"{% endif %}>{{ user.username }}</a><br>
+                <small>{{ user.id }}</small>
+            </td>
             <td>{{ user.role }}</td>
             <td>{{ user.date_created | date(format="%b %d %Y") }}</td>
             <td>
