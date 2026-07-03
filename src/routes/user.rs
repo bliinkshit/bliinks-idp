@@ -4,20 +4,38 @@ use std::time::Instant;
 
 use axum::{
     extract::{Path, State},
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use tera::Context;
+use uuid::Uuid;
 
 // internal
 use crate::{
-    db::queries::get_user_by_username,
+    db::queries::{get_user_by_id, get_user_by_username},
     error::{AppError, AppErrorResponse},
     helpers::get_user_ctx,
     render::render,
-    routes::error::render_error,
+    routes::{auth::USER_SESSION_KEY, error::render_error},
     session::Session,
     AppState,
 };
+
+pub async fn render_redirect(
+    session:      Session,
+    State(state): State<Arc<AppState>>,
+) -> Redirect {
+    let Some(user_id_str) = session.get::<String>(USER_SESSION_KEY) else {
+        return Redirect::to("/auth/login");
+    };
+    let Ok(user_id) = user_id_str.parse::<Uuid>() else {
+        return Redirect::to("/auth/login");
+    };
+    let Ok(Some(user)) = get_user_by_id(&state.pool, user_id).await else {
+        return Redirect::to("/auth/login");
+    };
+
+    Redirect::to(&format!("/@{}", user.username))
+}
 
 pub async fn render_profile(
     session:        Session,

@@ -104,6 +104,7 @@ async fn main() -> Result<(), AppError> {
         .route("/security/revoke-client", post(routes::security::handle_revoke_client))
         .route("/security/invite",        post(routes::security::handle_create_invite))
         .route("/@:username",             get(routes::user::render_profile))
+        .route("/me",                     get(routes::user::render_redirect))
         .layer(axum_middleware::from_fn(middleware::require_auth));
 
     let oauth_routes = Router::new()
