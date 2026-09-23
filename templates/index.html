@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+	<h1>bliinks.net</h1>
+	<h2>Welcome!</h2>
+	<p>
+		this is a new hub for all of the members of the bliinks network! if you have been a member in the past, you can log in with the same username you have used before! if you haven't updated your password yet, you will be <b>required to do so before you can log in</b>. get in touch with one of the administrators personally, or join our <a href="https://discord.gg/9G5AyJ876v">discord server</a> and ask us!
+	</p>
+	<h2>About</h2>
+	<p>
+		Bliinks is a community of creators and people who are passionate about old web, self-hosting, as well as art and technology in general. This is not a social network in the traditional sense. Social networks are by their nature centralized. This is more of a decentralized community, a place to hang out where everyone contributes in any way they can. If you want to join us, all you have to do is message an existing member. We keep our community invite-only to reduce spam and also to vet people we would like to work and communicate with. The chat is hosted by Your Average Softmodder, the forums are hosted by butt, the CDN server is hosted by WeWaffles, and the tube is hosted by eggdog. We develop our own software, so everything you see here is bespoke code written by us. Contributions are always welcome. Come and chat with us in the main chat, or post on the forums. Art, code, stories, even anything mundane you want to share will be welcome. We appreciate all contributions to our community. Welcome to Bliinks!
+	</p>
+	<p>
+		we reserve the right to kick anybody out if they are trolling to an annoying extent, spamming, being a douche or being creepy or anything like that. if u fuck up the vibe check, ur out — but most ppl are here because we like them already! be nice!
+	</p>
+	<h2>Technical information</h2>
+	<p>
+		bliinks itself is a network of connected services. the page you're viewing right now is known as "the bliinks hub". bliinks hub provides bliinks users with a central place to manage their account. connected services use a custom-spec OAuth2 API to get user data served here for their own purposes.
+	</p>
+	<p>
+		bliinks hub is built with Rust and uses SQLite as its database. it WAS run on an upgraded Dell PowerEdge T410 housed within one of our admins' personal datacenters. If you'd like to find out more about the bliinks network and how it works, check out the <a href="https://forums.bliinks.net/categories/announcements/posts/109">README</a> on our forum.
+	</p>
+	<p>
+		the code for this website is open source! check it out on <a href="https://github.com/bliinkshit/bliinks-idp">GitHub</a> or visit our <a href="https://trello.com/b/MMBCDbGT/bliinks">Trello</a> to keep up with the development progress. the adorable mascot was drawn by viore.
+	</p>
+</div>
+
+<div class="mascot">
+	<img src="/mascot_light.png">
+</div>
+{% endblock %}

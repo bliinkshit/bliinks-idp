@@ -1,0 +1,10 @@
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[general]
+title = "example"
+dev = true
+
+[database]
+url = "sqlite:./data.db?mode=rwc"

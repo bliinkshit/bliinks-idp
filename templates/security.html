@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Security</h1>
+
+    <h2>Connected Apps</h2>
+    {% if connected_clients %}
+    <table class="table" border="1" cellpadding="4" cellspacing="0">
+        <tr>
+            <th>App Name</th>
+            <th>Actions</th>
+        </tr>
+        {% for client in connected_clients %}
+        <tr>
+            <td>{{ client.name }}</td>
+            <td>
+                <form action="/security/revoke-client" method="POST">
+                    <input type="hidden" name="client_id" value="{{ client.id }}">
+                    <input type="submit" value="Revoke Access">
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No connected apps.</p>
+    {% endif %}
+
+    <h2>Invite Links</h2>
+    <form action="/security/invite" method="POST">
+        <input type="submit" value="Generate Invite Link">
+    </form>
+    {% if invites %}
+    <br>
+    <table class="table" border="1" cellpadding="4" cellspacing="0">
+        <tr>
+            <th>Link</th>
+            <th>Status</th>
+            <th>Created</th>
+        </tr>
+        {% for inv in invites %}
+        <tr>
+            <td>{% if not inv.used %}<a href="{{ inv.url }}">{{ inv.url }}</a>{% else %}<span>{{ inv.url }}</span>{% endif %}</td>
+            <td>{% if inv.used %}Used{% else %}Pending{% endif %}</td>
+            <td>{{ inv.created_at }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+
+    <h2>Reset Password</h2>
+    {% if reset_url %}<p>Your reset link (valid for 1 hour): <a href="{{ reset_url }}">{{ reset_url }}</a></p>{% endif %}
+    <form action="/security/reset" method="POST">
+        <input type="password" name="password" placeholder="Current password" required autocomplete="current-password">
+        <input type="submit" value="Send Reset Link">
+    </form>
+
+    <h2>Delete Account</h2>
+    <p>This will permanently delete your account. Your username will be released and your data removed. This cannot be undone.</p>
+    {% if error %}<p>{{ error }}</p>{% endif %}
+    <form action="/security/delete" method="POST">
+        <input type="password" name="password" placeholder="Current password" required autocomplete="current-password">
+        <input type="submit" value="Delete Account">
+    </form>
+</div>
+{% endblock %}
