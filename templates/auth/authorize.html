@@ -13,6 +13,10 @@
         {% if has_profile %}
         <li>Your display name, colour, avatar and role</li>
         {% endif %}
+        {% if has_notifications_read %}
+        <li>Read and manage your Bliinks notification inbox</li>
+        {% endif %}
+        
     </ul>
 
     <form action="/oauth/authorize" method="POST">

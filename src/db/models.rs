@@ -27,10 +27,45 @@ pub struct PasswordReset {
 
 #[derive(Debug, Clone, FromRow, Serialize)]
 pub struct OAuthClient {
+    pub id:                    Uuid,
+    pub secret_hash:           String,
+    pub name:                  String,
+    pub base_url:              Option<String>,
+    pub notifications_enabled: bool,
+    pub created_at:            DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct Notification {
+    pub id:              Uuid,
+    pub recipient_id:    Uuid,
+    pub client_id:       Uuid,
+    pub text:            String,
+    pub target_path:     String,
+    pub idempotency_key: String,
+    pub created_at:      DateTime<Utc>,
+    pub read_at:         Option<DateTime<Utc>>,
+    pub expires_at:      DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct NotificationWithApp {
     pub id:          Uuid,
-    pub secret_hash: String,
-    pub name:        String,
+    pub client_id:   Uuid,
+    pub app_name:    String,
+    pub base_url:    String,
+    pub text:        String,
+    pub target_path: String,
     pub created_at:  DateTime<Utc>,
+    pub read_at:     Option<DateTime<Utc>>,
+    pub expires_at:  DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct NotificationPreferenceWithApp {
+    pub client_id: Uuid,
+    pub app_name:  String,
+    pub enabled:   bool,
 }
 
 #[derive(Debug, Clone, FromRow)]

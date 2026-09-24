@@ -12,7 +12,7 @@ pub async fn get_client(
     client_id: Uuid,
 ) -> Result<Option<OAuthClient>, AppError> {
     sqlx::query_as::<_, OAuthClient>(
-        "SELECT id, secret_hash, name, created_at
+        "SELECT id, secret_hash, name, base_url, notifications_enabled, created_at
          FROM oauth_clients WHERE id = $1",
     )
     .bind(client_id)
@@ -23,7 +23,7 @@ pub async fn get_client(
 
 pub async fn get_all_clients(pool: &PgPool) -> Result<Vec<OAuthClient>, AppError> {
     sqlx::query_as::<_, OAuthClient>(
-        "SELECT id, secret_hash, name, created_at
+        "SELECT id, secret_hash, name, base_url, notifications_enabled, created_at
          FROM oauth_clients ORDER BY created_at ASC",
     )
     .fetch_all(pool)
@@ -38,7 +38,8 @@ pub async fn create_client(
     name:        &str,
 ) -> Result<(), AppError> {
     sqlx::query(
-        "INSERT INTO oauth_clients (id, secret_hash, name, created_at) VALUES ($1, $2, $3, NOW())",
+       "INSERT INTO oauth_clients (id, secret_hash, name, created_at)
+        VALUES ($1, $2, $3, NOW())",
     )
     .bind(id)
     .bind(secret_hash)
@@ -75,6 +76,28 @@ pub async fn add_redirect_uri(
     .await
     .map_err(|e| AppError::Internal(e.to_string()))?;
     Ok(())
+}
+
+pub async fn update_client_notification_settings(
+    pool: &PgPool,
+    client_id: Uuid,
+    base_url: Option<&str>,
+    notifications_enabled: bool,
+) -> Result<bool, AppError> {
+    let result = sqlx::query(
+        "UPDATE oauth_clients
+         SET base_url = $2,
+             notifications_enabled = $3
+         WHERE id = $1",
+    )
+    .bind(client_id)
+    .bind(base_url)
+    .bind(notifications_enabled)
+    .execute(pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(result.rows_affected() == 1)
 }
 
 pub async fn get_client_redirect_uris(
@@ -249,7 +272,13 @@ pub async fn get_connected_clients_for_user(
     user_id: Uuid,
 ) -> Result<Vec<OAuthClient>, AppError> {
     sqlx::query_as::<_, OAuthClient>(
-        "SELECT DISTINCT c.id, c.secret_hash, c.name, c.created_at
+        "SELECT DISTINCT
+    c.id,
+    c.secret_hash,
+    c.name,
+    c.base_url,
+    c.notifications_enabled,
+    c.created_at
          FROM oauth_clients c
          INNER JOIN oauth_tokens t ON t.client_id = c.id
          WHERE t.user_id = $1 AND t.expires_at > NOW()

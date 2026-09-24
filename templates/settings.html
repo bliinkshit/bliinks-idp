@@ -51,5 +51,63 @@
             </form>
         </div>
     </div>
+        <h2>Notifications</h2>
+
+    <form action="/settings/notifications" method="POST">
+        <label>
+            <input
+                type="checkbox"
+                name="disable_all"
+                {% if not all_notifications_enabled %}checked{% endif %}
+            >
+            Disable all notifications
+        </label>
+        <input type="submit" value="Save">
+    </form>
+
+    <p class="text-small">
+        This temporarily blocks notifications from every app without
+        changing your choices below.
+    </p>
+
+    <h3>Apps</h3>
+
+    {% if notification_apps %}
+        <table class="table" border="1" cellpadding="4" cellspacing="0">
+            <tr>
+                <th>App</th>
+                <th>Notifications</th>
+            </tr>
+
+            {% for app in notification_apps %}
+                <tr>
+                    <td>{{ app.app_name }}</td>
+                    <td>
+                        <form
+                            action="/settings/notifications/app"
+                            method="POST"
+                        >
+                            <input
+                                type="hidden"
+                                name="client_id"
+                                value="{{ app.client_id }}"
+                            >
+                            <label>
+                                <input
+                                    type="checkbox"
+                                    name="enabled"
+                                    {% if app.enabled %}checked{% endif %}
+                                >
+                                Enabled
+                            </label>
+                            <input type="submit" value="Save">
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No notification-enabled apps are available.</p>
+    {% endif %}
 </div>
 {% endblock %}

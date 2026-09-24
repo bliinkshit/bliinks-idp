@@ -185,6 +185,10 @@ pub async fn render_authorize(
     ctx.insert("scope",        &scopes::serialize(&scopes));
     ctx.insert("state",        query.state.as_deref().unwrap_or(""));
     ctx.insert("has_profile",  &scopes.contains(scopes::PROFILE));
+    ctx.insert(
+    "has_notifications_read",
+    &scopes.contains(scopes::NOTIFICATIONS_READ),
+);
 
     get_user_ctx(&state.pool, &state.roles, &session, &mut ctx).await;
 

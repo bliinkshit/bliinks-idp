@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Notifications</h1>
+
+    {% if unread_count > 0 %}
+        <p>
+            You have <strong>{{ unread_count }}</strong>
+            unread notification{% if unread_count != 1 %}s{% endif %}.
+        </p>
+                <form action="/notifications/read-all" method="POST">
+            <input type="submit" value="Mark all as read">
+        </form>
+    {% else %}
+        <p>You have no unread notifications.</p>
+    {% endif %}
+
+    {% if notifications %}
+        <table class="table" border="1" cellpadding="4" cellspacing="0">
+            <tr>
+                <th>App</th>
+                <th>Notification</th>
+                <th>Received</th>
+                <th>Status</th>
+            </tr>
+
+            {% for notification in notifications %}
+                <tr>
+                    <td>{{ notification.app_name }}</td>
+                    <td>
+                        <a href="/notifications/{{ notification.id }}/open">
+                            {{ notification.text }}
+                        </a>
+                    </td>
+                    <td>
+                        {{ notification.created_at | date(format="%b %d, %Y %H:%M UTC") }}
+                    </td>
+                    <td>
+                        {% if notification.read_at %}
+                            Read
+                        {% else %}
+                            <strong>Unread</strong>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Your notification inbox is empty.</p>
+    {% endif %}
+</div>
+{% endblock %}

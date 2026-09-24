@@ -6,7 +6,11 @@ use uuid::Uuid;
 
 // internal
 use crate::{
-    db::{models::User, queries::get_user_by_id},
+    db::{
+    models::User,
+    notification_queries::count_unread,
+    queries::get_user_by_id,
+},
     rbac::RoleCache,
     routes::auth::USER_SESSION_KEY,
     session::Session,
@@ -18,6 +22,7 @@ pub async fn get_user_ctx(pool: &PgPool, roles: &RoleCache, session: &Session, c
         ctx.insert("auth_role",         &"");
         ctx.insert("auth_display_name", &Option::<String>::None);
         ctx.insert("auth_color",        &Option::<String>::None);
+                ctx.insert("unread_count", &0_i64);
     };
 
     let Some(user_id_str) = session.get::<String>(USER_SESSION_KEY) else {
@@ -33,11 +38,16 @@ pub async fn get_user_ctx(pool: &PgPool, roles: &RoleCache, session: &Session, c
         return;
     };
 
+        let unread_count = count_unread(pool, user_id)
+        .await
+        .unwrap_or(0);
+
     let role_name = roles.name_for_id(&user.role).unwrap_or_default();
     ctx.insert("auth_username",     &user.username);
     ctx.insert("auth_role",         &role_name);
     ctx.insert("auth_display_name", &user.display_name);
     ctx.insert("auth_color",        &user.color);
+    ctx.insert("unread_count", &unread_count);
 }
 
 pub fn insert_user_ctx(ctx: &mut Context, user: &User, roles: &RoleCache) {

@@ -2,6 +2,7 @@
 pub mod models;
 pub mod queries;
 pub mod oauth_queries;
+pub mod notification_queries;
 
 use sqlx::{postgres::{PgConnectOptions, PgPoolOptions}, PgPool};
 use sqlx::migrate::Migrate;

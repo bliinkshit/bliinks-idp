@@ -23,6 +23,7 @@
             <th>Username</th>
             <th>ID</th>
             <th>Created</th>
+            <th>Notification settings</th>
             <th>Actions</th>
         </tr>
         {% for user in pending %}
@@ -58,6 +59,7 @@
             <th>ID</th>
             <th>Role</th>
             <th>Created</th>
+            <th>Notification settings</th>
             <th>Actions</th>
         </tr>
         {% for user in active %}
@@ -108,7 +110,7 @@
         <tr>
             <th>Username</th>
             <th>ID</th>
-            <th>Created</th>
+            <th>Notification settings</th>
             <th>Actions</th>
         </tr>
         {% for user in banned %}
@@ -168,6 +170,7 @@
             <th>Name</th>
             <th>Client ID</th>
             <th>Created</th>
+            <th>Notification settings</th>
             <th>Actions</th>
         </tr>
         {% for client in clients %}
@@ -175,6 +178,33 @@
             <td>{{ client.name }}</td>
             <td>{{ client.id }}</td>
             <td>{{ client.created_at }}</td>
+            <td>
+  <form action="/admin/clients/notifications" method="POST">
+    <input
+      type="hidden"
+      name="client_id"
+      value="{{ client.id }}"
+    >
+
+    <input
+      type="url"
+      name="base_url"
+      value="{{ client.base_url | default(value='') }}"
+      placeholder="https://app.example"
+    >
+
+    <label>
+      <input
+        type="checkbox"
+        name="notifications_enabled"
+        {% if client.notifications_enabled %}checked{% endif %}
+      >
+      Allow notifications
+    </label>
+
+    <input type="submit" value="Save">
+  </form>
+</td>
             <td>
                 <form action="/admin/clients/delete" method="POST">
                     <input type="hidden" name="client_id" value="{{ client.id }}">

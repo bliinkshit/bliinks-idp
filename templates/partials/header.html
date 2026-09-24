@@ -14,6 +14,11 @@
             {% endif %}
 
             {% if auth_username %}
+                            <li class="{% if page == "notifications" %}active{% endif %}">
+                    <a href="/notifications">
+                        Notifications{% if unread_count %} ({{ unread_count }}){% endif %}
+                    </a>
+                </li>
                 <li class="{% if page == "settings" %}active{% endif %}"><a href="/settings">Settings</a></li>
                 <li class="{% if page == "security" %}active{% endif %}"><a href="/security">Security</a></li>
                 <li><a href="/auth/logout">Logout</a></li>

@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use axum::{
     extract::{Form, Multipart, State},
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use chrono::Utc;
 use gif::{DecodeOptions, Encoder, Frame, Repeat};
@@ -17,7 +17,22 @@ use uuid::Uuid;
 
 // internal
 use crate::{
-    db::{models::User, queries::{get_user_by_id, set_avatar_updated_at, update_user_color, update_user_display_name}},
+    db::{
+    models::User,
+    notification_queries::{
+        get_user_notifications_enabled,
+        list_notification_preferences,
+        set_app_notifications_enabled,
+        set_user_notifications_enabled,
+        count_unread,
+    },
+    queries::{
+        get_user_by_id,
+        set_avatar_updated_at,
+        update_user_color,
+        update_user_display_name,
+    },
+},
     error::{AppError, AppErrorResponse},
     render::render,
     routes::{auth::USER_SESSION_KEY, avatar::AVATAR_DIR, error::render_error},
@@ -47,17 +62,37 @@ async fn settings_ctx(
         .await?
         .ok_or_else(|| AppError::Internal("User not found".into()))?;
 
+        let all_notifications_enabled =
+        get_user_notifications_enabled(&state.pool, user_id).await?;
+
+    let notification_apps =
+        list_notification_preferences(&state.pool, user_id).await?;
+
     let mut ctx = Context::new();
+        let unread_count = count_unread(
+        &state.pool,
+        user_id,
+    )
+    .await?;
+
     ctx.insert("title",        "Settings");
     ctx.insert("id",           &user.id.to_string());
     ctx.insert("avatar",       &user.avatar_updated_at.is_some());
     ctx.insert("username",     &user.username);
     ctx.insert("display_name", &user.display_name);
     ctx.insert("color",        &user.color);
+    ctx.insert(
+        "all_notifications_enabled",
+        &all_notifications_enabled,
+    );
+    ctx.insert("notification_apps", &notification_apps);
+        ctx.insert("unread_count", &unread_count);
+        
     insert_user_ctx(&mut ctx, &user, &state.roles);
 
     Ok((ctx, user))
 }
+
 
 pub async fn render_settings(
     session:      Session,
@@ -83,6 +118,91 @@ pub async fn render_settings(
     render(&state.tera, "settings.html", &mut ctx, start)
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
+}
+
+#[derive(Deserialize)]
+pub struct GlobalNotificationForm {
+    pub disable_all: Option<String>,
+}
+
+pub async fn handle_global_notifications(
+    session: Session,
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<GlobalNotificationForm>,
+) -> Result<Response, AppErrorResponse> {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
+        Some(id) => id,
+        None => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let enabled = form.disable_all.is_none();
+
+    set_user_notifications_enabled(
+        &state.pool,
+        user_id,
+        enabled,
+    )
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+    Ok(Redirect::to("/settings").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct AppNotificationForm {
+    pub client_id: String,
+    pub enabled:   Option<String>,
+}
+
+pub async fn handle_app_notifications(
+    session: Session,
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<AppNotificationForm>,
+) -> Result<Response, AppErrorResponse> {
+    let user_id_str: String = match session.get(USER_SESSION_KEY) {
+        Some(id) => id,
+        None => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let user_id = match user_id_str.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => return Ok(Redirect::to("/auth/login").into_response()),
+    };
+
+    let client_id = form
+        .client_id
+        .parse::<Uuid>()
+        .map_err(|_| {
+            AppErrorResponse(
+                Arc::clone(&state),
+                AppError::BadRequest("Invalid app ID.".into()),
+            )
+        })?;
+
+    let updated = set_app_notifications_enabled(
+        &state.pool,
+        user_id,
+        client_id,
+        form.enabled.is_some(),
+    )
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+    if !updated {
+        return Err(AppErrorResponse(
+            Arc::clone(&state),
+            AppError::BadRequest(
+                "That app cannot send notifications.".into(),
+            ),
+        ));
+    }
+
+    Ok(Redirect::to("/settings").into_response())
 }
 
 #[derive(Deserialize)]

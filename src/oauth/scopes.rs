@@ -1,10 +1,15 @@
 // src/oauth/scopes.rs
 use std::collections::HashSet;
 
-pub const OPENID:  &str = "openid";
-pub const PROFILE: &str = "profile";
+pub const OPENID:             &str = "openid";
+pub const PROFILE:            &str = "profile";
+pub const NOTIFICATIONS_READ: &str = "notifications:read";
 
-const VALID: &[&str] = &[OPENID, PROFILE];
+const VALID: &[&str] = &[
+    OPENID,
+    PROFILE,
+    NOTIFICATIONS_READ,
+];
 
 pub fn parse(raw: &str) -> HashSet<String> {
     raw.split_whitespace()

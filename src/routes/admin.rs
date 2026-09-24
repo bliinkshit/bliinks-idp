@@ -21,7 +21,7 @@ use crate::{
     db::{
         models::User,
         oauth_queries::{
-            add_redirect_uri, create_client, delete_client, get_all_clients, revoke_all_tokens_for_user,
+            add_redirect_uri, create_client, delete_client, get_all_clients, revoke_all_tokens_for_user, update_client_notification_settings,
         },
         queries::{
             delete_sessions_for_user, delete_user, get_all_users, issue_password_reset, set_user_role,
@@ -86,6 +86,13 @@ pub struct CreateClientForm {
 #[derive(Deserialize)]
 pub struct DeleteClientForm {
     pub client_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct ClientNotificationSettingsForm {
+    pub client_id: String,
+    pub base_url: String,
+    pub notifications_enabled: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -271,6 +278,68 @@ pub async fn handle_create_client(
     render(&state.tera, "admin.html", &mut ctx, Instant::now())
         .map(|html| Html(html).into_response())
         .map_err(|e| AppErrorResponse(Arc::clone(&state), e))
+}
+
+pub async fn handle_client_notification_settings(
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<ClientNotificationSettingsForm>,
+) -> Result<Redirect, AppErrorResponse> {
+    let client_id = form.client_id.parse::<Uuid>()
+        .map_err(|_| {
+            AppErrorResponse(
+                Arc::clone(&state),
+                AppError::BadRequest("Invalid client ID.".into()),
+            )
+        })?;
+
+    let base_url = form.base_url.trim().trim_end_matches('/');
+
+    let base_url = if base_url.is_empty() {
+        None
+    } else {
+        if !base_url.starts_with("https://")
+            && !base_url.starts_with("http://")
+        {
+            return Err(AppErrorResponse(
+                Arc::clone(&state),
+                AppError::BadRequest(
+                    "Base URL must begin with http:// or https://".into(),
+                ),
+            ));
+        }
+
+        Some(base_url)
+    };
+
+    let notifications_enabled =
+        form.notifications_enabled.is_some();
+
+    if notifications_enabled && base_url.is_none() {
+        return Err(AppErrorResponse(
+            Arc::clone(&state),
+            AppError::BadRequest(
+                "A base URL is required when notifications are enabled.".into(),
+            ),
+        ));
+    }
+
+    let updated = update_client_notification_settings(
+        &state.pool,
+        client_id,
+        base_url,
+        notifications_enabled,
+    )
+    .await
+    .map_err(|e| AppErrorResponse(Arc::clone(&state), e))?;
+
+    if !updated {
+        return Err(AppErrorResponse(
+            Arc::clone(&state),
+            AppError::NotFound,
+        ));
+    }
+
+    Ok(Redirect::to("/admin"))
 }
 
 pub async fn handle_delete_client(
