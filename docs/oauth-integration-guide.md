@@ -23,6 +23,9 @@ Request only what you need:
 |-------|-------------|
 | `openid` | User's ID (`sub`), username, account creation date, and role. Required. |
 | `profile` | Display name, colour preference, and avatar (if set). |
+| `notifications:read` | Read and update the user's shared Bliinks notification inbox. |
+
+Applications that display notifications should request `openid profile notifications:read`. Sending notifications uses the application's client credentials and does not require a user scope. See the [notifications integration guide](notifications-integration-guide.md) for the complete sending and inbox APIs.
 
 ---
 
@@ -204,6 +207,12 @@ Common errors:
 | `/oauth/token` | POST | Exchange code or refresh tokens |
 | `/oauth/token/revoke` | POST | Revoke a token |
 | `/oauth/userinfo` | GET | Fetch user profile |
+| `/api/v1/notifications` | GET/POST | Read the user's inbox or send a notification |
+| `/api/v1/notifications/unread-count` | GET | Get the user's unread count |
+| `/api/v1/notifications/:id/read` | POST | Mark one notification as read |
+| `/api/v1/notifications/read-all` | POST | Mark every notification as read |
+
+The notification endpoints use different authentication depending on the operation. Read and update operations require a user bearer token with `notifications:read`; sending requires the OAuth client's HTTP Basic credentials. See the [notifications integration guide](notifications-integration-guide.md).
 
 ---
 

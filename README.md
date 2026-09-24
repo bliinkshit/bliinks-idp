@@ -139,7 +139,10 @@ When reporting a bug through GitHub issues, remember to include your browser ver
 
 ## Additional information
 
-For additional information, such as integrating OAuth into your application, please see the `/docs` directory.
+Integration documentation:
+
+- [OAuth integration guide](docs/oauth-integration-guide.md)
+- [Notifications integration guide](docs/notifications-integration-guide.md)
 
 ## License
 
